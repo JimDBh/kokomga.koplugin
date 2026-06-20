@@ -10,7 +10,7 @@ A KOReader plugin for Komga servers. It provides a native browser interface and 
 - Progress sync (forward/backward) on book open/close
 
 ## Installation
-Copy `komga.koplugin` to KOReader `plugins` folder
+Download and copy `kokomga.koplugin` folder to KOReader `plugins` folder
 
 ## Configuration
 1. Open KOReader's top menu
