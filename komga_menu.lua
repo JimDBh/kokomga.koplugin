@@ -117,7 +117,7 @@ function KomgaMenu:createSettingsMenu()
                                 end
                             },
                             {
-                                text = function()
+                                text_func = function()
                                     local pages = self.plugin.settings.sync_interval_pages or 5
                                     return "Auto-push progress every " .. pages .. " pages"
                                 end,
