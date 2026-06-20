@@ -1,0 +1,209 @@
+--[[
+    KOReader Plugin: Komga Sync & Download Bridge
+    Modularized Entry Point
+--]]
+
+-- Lua 5.3 compatibility fallback for unpack
+if not unpack then
+    unpack = table.unpack
+end
+
+-- Robust requirement of KOReader modules
+local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local UIManager = require("ui/uimanager")
+local InfoMessage = require("ui/widget/infomessage")
+local logger = require("logger")
+local DataStorage = require("datastorage")
+local Dispatcher = require("dispatcher")
+local LuaSettings = require("luasettings")
+
+-- Determine plugin path for relative requires
+local plugin_name = (...)
+local plugin_dir = ""
+if type(plugin_name) == "string" then
+    plugin_dir = plugin_name:match("(.-)[^/%.]+$") or ""
+end
+
+local KomgaAPI = require(plugin_dir .. "komga_api")
+local KomgaCache = require(plugin_dir .. "komga_cache")
+local KomgaSync = require(plugin_dir .. "komga_sync")
+local KomgaMenu = require(plugin_dir .. "komga_menu")
+
+local KomgaPlugin = WidgetContainer:extend{
+    name = "kokomga",
+    is_active = false,
+    settings = nil,
+    api = nil,
+    cache = nil,
+    sync = nil,
+    menu = nil,
+    last_synced_page = 0
+}
+
+-- Default local settings template
+local DEFAULT_SETTINGS = {
+    server_url = "http://192.168.1.100:8080",
+    api_key = "",
+    auto_sync_on_open = true,
+    auto_sync_on_close = true,
+    matched_books_cache = {}, 
+    download_dir = "",
+    download_to_subfolder = true,
+    sync_interval_pages = 5,
+    sync_forward = 1,  -- 1=Prompt, 2=Auto, 3=Never
+    sync_backward = 1, -- 1=Prompt, 2=Auto, 3=Never
+    cache_expiry_policy = "smart", 
+    cache_expiry_mins = 60,
+    cache_covers = false,
+    library_metadata_cache = {}
+}
+
+function KomgaPlugin:init()
+    logger.info("KomgaPlugin: Initializing...")
+    self:loadSettings()
+    self:initAPI()
+    
+    -- Initialize sub-modules
+    self.cache = KomgaCache:new(self)
+    self.sync = KomgaSync:new(self)
+    self.menu = KomgaMenu:new(self)
+    
+    self.ui.menu:registerToMainMenu(self)
+    self:registerEvents()
+    logger.info("KomgaPlugin: Initialized successfully")
+end
+
+function KomgaPlugin:loadSettings()
+    local settings_path = DataStorage:getSettingsDir() .. "/kokomga.lua"
+    logger.dbg("KomgaPlugin: Loading settings from", settings_path)
+    
+    -- Safety check for LuaSettings
+    if not LuaSettings then
+        self:notify("Incompatible system: LuaSettings not found.", "error")
+        self.settings = DEFAULT_SETTINGS
+        return
+    end
+
+    self.settings_file = LuaSettings:open(settings_path)
+    self.settings = {}
+    for k, v in pairs(DEFAULT_SETTINGS) do
+        local saved = self.settings_file:readSetting(k)
+        if saved ~= nil then
+            self.settings[k] = saved
+        else
+            self.settings[k] = v
+        end
+    end
+    logger.info("KomgaPlugin: Settings loaded")
+end
+
+function KomgaPlugin:saveSettings()
+    if not self.settings_file then return end
+    for k, v in pairs(self.settings) do
+        self.settings_file:saveSetting(k, v)
+    end
+    self.settings_file:flush()
+end
+
+function KomgaPlugin:initAPI()
+    if self.settings.server_url and self.settings.server_url ~= "" and self.settings.api_key and self.settings.api_key ~= "" then
+        logger.info("KomgaPlugin: Initializing API with URL:", self.settings.server_url)
+        self.api = KomgaAPI:new(
+            self.settings.server_url,
+            self.settings.api_key
+        )
+    else
+        logger.warn("KomgaPlugin: API not initialized (missing server URL or API key)")
+        self.api = nil
+    end
+end
+
+function KomgaPlugin:registerEvents()
+    Dispatcher:registerAction("komga_sync_now", {
+        category = "sync",
+        title = "Manual Komga Sync",
+        event = "KomgaSyncNow",
+        handler = function() self.sync:matchCurrentBook() end
+    })
+end
+
+function KomgaPlugin:notify(message, type)
+    type = type or "info"
+    logger.info("[Komga Plugin] " .. message)
+    UIManager:show(InfoMessage:new{ text = "[Komga] " .. message, timeout = 3 })
+end
+
+function KomgaPlugin:getDownloadDir()
+    local logger = require("logger")
+    logger.info("KomgaPlugin: getDownloadDir called")
+    if self.settings.download_dir and self.settings.download_dir ~= "" then
+        logger.info("KomgaPlugin: using custom download_dir:", self.settings.download_dir)
+        return self.settings.download_dir
+    end
+    local path = G_reader_settings and G_reader_settings:readSetting("home_dir")
+    
+    if path and path ~= "" then
+        logger.info("KomgaPlugin: using home_dir as download_dir:", path)
+        return path
+    end
+    
+    logger.warn("KomgaPlugin: UI prompt, no directory set for download")
+    self:notify("No directory set for download! Please set a Home Directory or custom path.", "error")
+    return nil
+end
+
+-- Lifecycle hooks
+function KomgaPlugin:onReaderReady()
+    local ui = self.ui
+    local document = ui and ui.document
+    local filepath = document and document.file
+    logger.info("KomgaPlugin: onReaderReady triggered for", tostring(filepath))
+    self.is_active = true
+    self.last_synced_page = ui and ui.view and ui.view.state.page or 1
+    if self.settings.auto_sync_on_open and filepath then
+        logger.info("KomgaPlugin: Auto-sync on open enabled, pulling progress")
+        local UIManager = require("ui/uimanager")
+        UIManager:nextTick(function() self.sync:pullProgress(ui) end)
+    end
+end
+
+function KomgaPlugin:onPageUpdate(page)
+    if not self.is_active or not page then return end
+    if not self.settings.auto_sync_on_open then return end
+    
+    local interval = tonumber(self.settings.sync_interval_pages) or 0
+    if interval > 0 then
+        if not self.last_synced_page then
+            self.last_synced_page = page
+        elseif math.abs(page - self.last_synced_page) >= interval then
+            self.last_synced_page = page
+            local ui = self.ui
+            if ui then
+                self.sync:pushProgressForDocument(ui, true)
+            end
+        end
+    end
+end
+
+function KomgaPlugin:onCloseDocument()
+    logger.info("KomgaPlugin: onCloseDocument triggered")
+    if not self.is_active then return end
+    self.is_active = false
+    local ui = self.ui
+    local document = ui and ui.document
+    local filepath = document and document.file
+    if self.settings.auto_sync_on_close and filepath then
+        self.sync:pushProgressForDocument(ui)
+    end
+end
+
+function KomgaPlugin:addToMainMenu(menu_items)
+    menu_items.komga_plugin = {
+        text = "kokomga",
+        search = true,
+        keep_menu_open = true,
+        sub_item_table_func = function() return self.menu:createSettingsMenu() end
+    }
+end
+
+return KomgaPlugin
