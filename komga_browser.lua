@@ -1,4 +1,5 @@
 local Menu = require("ui/widget/menu")
+local KomgaListMenu = require("komga_list_menu")
 local UIManager = require("ui/uimanager")
 
 local function hideWidget(w)
@@ -58,7 +59,7 @@ local function toggleFilterButton(browser, opts)
     UIManager:setDirty(title_bar, "ui")
 end
 
-local KomgaBrowser = Menu:extend{
+local KomgaBrowser = KomgaListMenu:extend{
     is_interactive = true,
     is_fullscreen = true,
     covers_fullscreen = true,
