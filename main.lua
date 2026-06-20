@@ -56,6 +56,10 @@ local DEFAULT_SETTINGS = {
     cache_expiry_mins = 60,
     cache_covers = false,
     never_update_covers = false,
+    view_mode = "list",
+    list_row_height = 110,
+    grid_columns = 3,
+    grid_rows = 3,
     library_metadata_cache = {}
 }
 

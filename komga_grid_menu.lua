@@ -7,7 +7,6 @@ local GestureRange = require("ui/gesturerange")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local InputContainer = require("ui/widget/container/inputcontainer")
-local LineWidget = require("ui/widget/linewidget")
 local Menu = require("ui/widget/menu")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
@@ -21,20 +20,20 @@ local logger = require("logger")
 
 local Screen = require("device").screen
 
-local LIST_LAYOUT = {
-    padding_v = Screen:scaleBySize(2),
-    padding_h = Screen:scaleBySize(15),
-    cover_text_gap = Screen:scaleBySize(10),
+local GRID_LAYOUT = {
+    padding = Screen:scaleBySize(6),
+    cover_text_gap = Screen:scaleBySize(8),
+    text_height = Screen:scaleBySize(45),
 }
 
-local KomgaListItem = InputContainer:extend{
+local KomgaGridItem = InputContainer:extend{
     entry = nil,
     width = nil,
     height = nil,
     menu = nil,
 }
 
-function KomgaListItem:init()
+function KomgaGridItem:init()
     self.dimen = Geom:new{ w = self.width, h = self.height }
     self.ges_events = {
         TapSelect = {
@@ -42,9 +41,8 @@ function KomgaListItem:init()
         },
     }
 
-    local title_face = Font:getFace("smallinfofont", 20)
     local title_text = self.entry.text or self.entry.title or "Unknown"
-    local text_width = self.width - (LIST_LAYOUT.padding_h * 2)
+    local text_width = self.width - (GRID_LAYOUT.padding * 2)
     
     local cover_widget
     if self.entry.cover_id and self.entry.cover_type then
@@ -54,11 +52,18 @@ function KomgaListItem:init()
         local cache_key = self.entry.cover_type .. "_" .. self.entry.cover_id
         local local_path = covers_dir .. "/" .. cache_key .. ".jpg"
         
-        -- Top/bottom padding
-        local v_padding = LIST_LAYOUT.padding_v * 2
-        local cover_h = self.height - v_padding - 1 -- -1 for border adjustment
-        if cover_h < 10 then cover_h = 10 end
+        -- Space taken by text and padding
+        local v_text_space = GRID_LAYOUT.text_height + GRID_LAYOUT.cover_text_gap
+        local v_padding = GRID_LAYOUT.padding * 2
+        local cover_h = self.height - v_text_space - v_padding
         local cover_w = math.floor(cover_h * 2 / 3)
+        
+        -- Ensure cover doesn't exceed cell width
+        local max_w = self.width - (GRID_LAYOUT.padding * 2)
+        if cover_w > max_w then
+            cover_w = max_w
+            cover_h = math.floor(cover_w * 3 / 2)
+        end
         
         if lfs.attributes(local_path, "mode") == "file" then
             local ImageWidget = require("ui/widget/imagewidget")
@@ -74,62 +79,71 @@ function KomgaListItem:init()
                 dimen = Geom:new{ w = cover_w, h = cover_h },
                 TextWidget:new{
                     text = "📖",
-                    face = Font:getFace("cfont", math.floor(cover_h / 3)),
+                    face = Font:getFace("cfont", 60),
                 }
             }
         end
-        text_width = self.width - (LIST_LAYOUT.padding_h * 2) - cover_w - LIST_LAYOUT.cover_text_gap
     end
     
+    local current_font_size = 16
+    local min_font_size = 12
+    local title_face
+    
+    while current_font_size > min_font_size do
+        title_face = Font:getFace("smallinfofont", current_font_size)
+        local test_widget = TextBoxWidget:new{
+            text = title_text,
+            face = title_face,
+            width = text_width,
+            alignment = "center",
+            bold = true,
+        }
+        
+        if test_widget:getSize().h <= GRID_LAYOUT.text_height then
+            break
+        end
+        current_font_size = current_font_size - 1
+    end
+    
+    title_face = Font:getFace("smallinfofont", current_font_size)
     local title_widget = TextBoxWidget:new{
         text = title_text,
         face = title_face,
         width = text_width,
-        alignment = "left",
+        height = GRID_LAYOUT.text_height,
+        alignment = "center",
         bold = true,
     }
 
     local text_group = VerticalGroup:new{
-        align = "left",
+        align = "center",
         title_widget,
     }
     
-    local row_elements = { align = "center" }
+    local col_elements = { align = "center" }
     if cover_widget then
-        table.insert(row_elements, cover_widget)
-        table.insert(row_elements, HorizontalSpan:new{ width = LIST_LAYOUT.cover_text_gap })
+        table.insert(col_elements, cover_widget)
+        table.insert(col_elements, VerticalSpan:new{ width = GRID_LAYOUT.cover_text_gap })
     end
-    table.insert(row_elements, text_group)
+    table.insert(col_elements, text_group)
 
     local content_frame = FrameContainer:new{
         width = self.width,
-        height = self.height - 1,
-        padding_top = LIST_LAYOUT.padding_v,
-        padding_bottom = LIST_LAYOUT.padding_v,
-        padding_left = LIST_LAYOUT.padding_h,
-        padding_right = LIST_LAYOUT.padding_h,
+        height = self.height,
+        padding = GRID_LAYOUT.padding,
         margin = 0,
         bordersize = 0,
         background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{
-            dimen = Geom:new{ w = self.width - (LIST_LAYOUT.padding_h * 2), h = self.height - 1 - (LIST_LAYOUT.padding_v * 2) },
-            HorizontalGroup:new(row_elements)
+            dimen = Geom:new{ w = self.width - (GRID_LAYOUT.padding * 2), h = self.height - (GRID_LAYOUT.padding * 2) },
+            VerticalGroup:new(col_elements)
         }
     }
 
-    local delimiter = LineWidget:new{
-        dimen = Geom:new{ w = self.width, h = 1 },
-        background = Blitbuffer.COLOR_LIGHT_GRAY,
-    }
-
-    self[1] = VerticalGroup:new{
-        align = "left",
-        content_frame,
-        delimiter,
-    }
+    self[1] = content_frame
 end
 
-function KomgaListItem:onTapSelect(arg, ges)
+function KomgaGridItem:onTapSelect(arg, ges)
     if self.menu and self.menu.onMenuSelect then
         self.menu:onMenuSelect(self.entry)
         return true
@@ -137,29 +151,15 @@ function KomgaListItem:onTapSelect(arg, ges)
     return false
 end
 
-function KomgaListItem:free()
+function KomgaGridItem:free()
 end
 
-local KomgaListMenu = Menu:extend{
-    item_height = 110,
+local KomgaGridMenu = Menu:extend{
+    columns = 3,
+    grid_rows = 3,
 }
 
-function KomgaListMenu:_recalculateDimen()
-    -- Dynamically determine row height based on whether any item has a cover
-    local has_covers = false
-    if self.item_table then
-        for _, item in ipairs(self.item_table) do
-            if item.cover_id then
-                has_covers = true
-                break
-            end
-        end
-    end
-    
-    -- Compact height for text-only menus, tall height for cover menus
-    local list_height = (self.plugin and self.plugin.settings and self.plugin.settings.list_row_height) or 110
-    self.item_height = has_covers and list_height or 70
-
+function KomgaGridMenu:_recalculateDimen()
     -- Calculate available dimensions for the list
     local available_width = self.inner_dimen.w
     local available_height = self.inner_dimen.h
@@ -173,11 +173,13 @@ function KomgaListMenu:_recalculateDimen()
         available_height = available_height - self.page_info:getSize().h
     end
 
-    local rows_per_page = math.floor(available_height / self.item_height)
-    if rows_per_page < 1 then rows_per_page = 1 end
+    local rows_per_page = self.grid_rows or 3
+    self.item_height = math.floor(available_height / rows_per_page)
 
     self.perpage = rows_per_page
-    self.page_num = math.ceil(#self.item_table / self.perpage)
+    
+    local logical_per_page = rows_per_page * self.columns
+    self.page_num = math.ceil(#self.item_table / logical_per_page)
     if self.page_num > 0 and self.page > self.page_num then
         self.page = self.page_num
     end
@@ -188,7 +190,7 @@ function KomgaListMenu:_recalculateDimen()
     }
 end
 
-function KomgaListMenu:updateItems(select_number)
+function KomgaGridMenu:updateItems(select_number)
     self.layout = {}
     self.item_group:clear()
 
@@ -198,31 +200,36 @@ function KomgaListMenu:updateItems(select_number)
     if self.page_info then self.page_info:resetLayout() end
     if self.return_button then self.return_button:resetLayout() end
 
-    local idx_offset = (self.page - 1) * self.perpage
+    local logical_per_page = self.perpage * self.columns
+    local idx_offset = (self.page - 1) * logical_per_page
     local rows_per_page = self.perpage
 
-    -- Add a top delimiter before the first item
-    table.insert(self.item_group, LineWidget:new{
-        dimen = Geom:new{ w = self.item_width, h = 1 },
-        background = Blitbuffer.COLOR_LIGHT_GRAY,
-    })
-
     for row = 1, rows_per_page do
-        local entry_idx = idx_offset + row
-        local entry = self.item_table[entry_idx]
+        local row_elements = { align = "center" }
+        local layout_row = {}
+        
+        for col = 1, self.columns do
+            local entry_idx = idx_offset + (row - 1) * self.columns + col
+            local entry = self.item_table[entry_idx]
 
-        if entry then
-            local list_item = KomgaListItem:new{
-                entry = entry,
-                width = self.item_width,
-                height = self.item_height,
-                menu = self,
-            }
-            table.insert(self.item_group, list_item)
-            table.insert(self.layout, { list_item })
-        else
-            -- Insert empty space to maintain alignment
-            table.insert(self.item_group, VerticalSpan:new{ width = self.item_width, height = self.item_height })
+            if entry then
+                local grid_item = KomgaGridItem:new{
+                    entry = entry,
+                    width = math.floor(self.item_width / self.columns),
+                    height = self.item_height,
+                    menu = self,
+                }
+                table.insert(row_elements, grid_item)
+                table.insert(layout_row, grid_item)
+            else
+                -- Insert empty space to maintain alignment
+                table.insert(row_elements, HorizontalSpan:new{ width = math.floor(self.item_width / self.columns) })
+            end
+        end
+        
+        table.insert(self.item_group, HorizontalGroup:new(row_elements))
+        if #layout_row > 0 then
+            table.insert(self.layout, layout_row)
         end
     end
 
@@ -234,10 +241,10 @@ function KomgaListMenu:updateItems(select_number)
     end)
 end
 
-function KomgaListMenu:onMenuSelect(item)
+function KomgaGridMenu:onMenuSelect(item)
     if item and item.callback then
         item.callback(item)
     end
 end
 
-return KomgaListMenu
+return KomgaGridMenu

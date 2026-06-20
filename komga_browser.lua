@@ -1,5 +1,6 @@
 local Menu = require("ui/widget/menu")
 local KomgaListMenu = require("komga_list_menu")
+local KomgaGridMenu = require("komga_grid_menu")
 local UIManager = require("ui/uimanager")
 
 local function hideWidget(w)
@@ -24,38 +25,132 @@ local function showWidget(w)
     end
 end
 
-local function toggleFilterButton(browser, opts)
+local function toggleTitleButtons(browser, opts)
     local title_bar = browser.title_bar
     if not title_bar then return end
 
-    if opts and opts.is_series then
-        if not title_bar.filter_btn then
+    local is_home = (#browser.paths == 0)
+    
+    if is_home then
+        if title_bar.menu_btn then hideWidget(title_bar.menu_btn) end
+    else
+        if not title_bar.menu_btn then
             local Button = require("ui/widget/button")
             local Screen = require("device").screen
-            title_bar.filter_btn = Button:new{
-                text = "Filter",
+            title_bar.menu_btn = Button:new{
+                text = "≡",
                 bordersize = 0,
                 padding = Screen:scaleBySize(10),
                 show_parent = title_bar,
                 callback = function() end
             }
-            title_bar.filter_btn.overlap_align = "left"
-            title_bar.filter_btn.overlap_offset = { Screen:scaleBySize(10), 0 }
-            title_bar.filter_btn:getSize() -- Initialize dimen
-            table.insert(title_bar, title_bar.filter_btn)
+            title_bar.menu_btn.overlap_align = "left"
+            title_bar.menu_btn.overlap_offset = { Screen:scaleBySize(10), 0 }
+            title_bar.menu_btn:getSize()
+            table.insert(title_bar, title_bar.menu_btn)
         end
         
-        hideWidget(title_bar.left_button)
-        showWidget(title_bar.filter_btn)
-        title_bar.filter_btn.callback = function() browser:showFilterDialog(opts.series_id, opts.original_title, opts.read_status) end
-    else
-        hideWidget(title_bar.left_button)
-        if title_bar.filter_btn then
-            hideWidget(title_bar.filter_btn)
-            title_bar.filter_btn.callback = function() end
+        showWidget(title_bar.menu_btn)
+        title_bar.menu_btn.callback = function()
+            local ButtonDialog = require("ui/widget/buttondialog")
+            local buttons = {}
+            local current_mode = browser.view_mode
+            
+            table.insert(buttons, { {
+                text = current_mode == "grid" and "Switch to List View" or "Switch to Grid View",
+                callback = function()
+                    if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
+                    local new_mode = current_mode == "grid" and "list" or "grid"
+                    browser:setViewMode(new_mode)
+                end,
+                align = "left",
+            } })
+            
+            table.insert(buttons, {})
+            
+            local InputDialog = require("ui/widget/inputdialog")
+            
+            local function createSettingDialog(title, key, default_val)
+                local dialog
+                dialog = InputDialog:new{
+                    title = title,
+                    input = tostring(browser.plugin.settings[key] or default_val),
+                    buttons = {
+                        {
+                            { text = "Cancel", callback = function() UIManager:close(dialog) end },
+                            { text = "Save", callback = function()
+                                local val = tonumber(dialog:getInputText())
+                                if val then
+                                    browser.plugin.settings[key] = val
+                                    browser.plugin:saveSettings()
+                                    browser:setViewMode(browser.view_mode, false)
+                                end
+                                UIManager:close(dialog)
+                            end }
+                        }
+                    }
+                }
+                return dialog
+            end
+
+            if current_mode == "list" then
+                table.insert(buttons, { {
+                    text = "List Row Height",
+                    callback = function()
+                        if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
+                        UIManager:show(createSettingDialog("List Row Height", "list_row_height", 110))
+                    end,
+                    align = "left",
+                } })
+            else
+                table.insert(buttons, { {
+                    text = "Grid Columns",
+                    callback = function()
+                        if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
+                        UIManager:show(createSettingDialog("Grid Columns", "grid_columns", 3))
+                    end,
+                    align = "left",
+                } })
+                
+                table.insert(buttons, { {
+                    text = "Grid Rows",
+                    callback = function()
+                        if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
+                        UIManager:show(createSettingDialog("Grid Rows", "grid_rows", 3))
+                    end,
+                    align = "left",
+                } })
+            end
+            
+            if opts and opts.is_series then
+                table.insert(buttons, {})
+                table.insert(buttons, { {
+                    text = "Filter Series",
+                    callback = function()
+                        if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
+                        browser:showFilterDialog(opts.series_id, opts.original_title, opts.read_status)
+                    end,
+                    align = "left",
+                } })
+            end
+            
+            browser.menu_dialog = ButtonDialog:new{
+                buttons = buttons,
+                shrink_unneeded_width = true,
+                anchor = function() return title_bar.menu_btn.dimen end,
+            }
+            UIManager:show(browser.menu_dialog)
         end
-        browser.onLeftButtonTap = function() end
     end
+    
+    -- Clean up legacy buttons if they exist
+    if title_bar.view_btn then hideWidget(title_bar.view_btn) end
+    if title_bar.filter_btn then hideWidget(title_bar.filter_btn) end
+
+    -- Always hide the default left button (search)
+    hideWidget(title_bar.left_button)
+    browser.onLeftButtonTap = function() end
+    
     UIManager:setDirty(title_bar, "ui")
 end
 
@@ -87,6 +182,58 @@ function KomgaBrowser:init()
     if self.title_bar and self.title_bar.left_button then
         hideWidget(self.title_bar.left_button)
     end
+    self:autoSetViewMode(self.item_table)
+end
+
+function KomgaBrowser:autoSetViewMode(item_table)
+    local has_covers = false
+    if item_table and #item_table > 0 then
+        -- Fast check first item
+        local first = item_table[1]
+        if first.cover_id or first.cover_type then
+            has_covers = true
+        else
+            -- Check at least a few items in case the first is a text-only header
+            for i = 1, math.min(#item_table, 5) do
+                if item_table[i].cover_id or item_table[i].cover_type then
+                    has_covers = true
+                    break
+                end
+            end
+        end
+    end
+    
+    local is_home = (#self.paths == 0)
+    if is_home or not has_covers then
+        self:setViewMode("list", false)
+    else
+        self:setViewMode(self.plugin.settings.view_mode or "list", false)
+    end
+end
+
+function KomgaBrowser:setViewMode(mode, save_preference)
+    self.view_mode = mode
+    if save_preference ~= false then
+        self.plugin.settings.view_mode = mode
+        self.plugin:saveSettings()
+    end
+    
+    if mode == "grid" then
+        self._recalculateDimen = KomgaGridMenu._recalculateDimen
+        self.updateItems = KomgaGridMenu.updateItems
+        self.columns = self.plugin.settings.grid_columns or KomgaGridMenu.columns
+        self.grid_rows = self.plugin.settings.grid_rows or 3
+    else
+        self._recalculateDimen = KomgaListMenu._recalculateDimen
+        self.updateItems = KomgaListMenu.updateItems
+        self.columns = nil
+        self.grid_rows = nil
+        self.item_height = self.plugin.settings.list_row_height or KomgaListMenu.item_height
+    end
+    
+    if self.item_table then
+        self:updateItems()
+    end
 end
 
 function KomgaBrowser:onReturn()
@@ -94,12 +241,13 @@ function KomgaBrowser:onReturn()
     local path = self.paths[#self.paths]
     if path then
         self.catalog_title = path.title
+        self:autoSetViewMode(path.item_table)
         self:switchItemTable(path.title, path.item_table)
-        toggleFilterButton(self, path.opts)
+        toggleTitleButtons(self, path.opts)
     else
         self:init() -- Reset internal state
         self:switchItemTable(self.catalog_title, self.item_table)
-        toggleFilterButton(self, nil)
+        toggleTitleButtons(self, nil)
     end
     return true
 end
@@ -107,7 +255,7 @@ end
 function KomgaBrowser:onHoldReturn()
     self:init()
     self:switchItemTable(self.catalog_title, self.item_table)
-    toggleFilterButton(self, nil)
+    toggleTitleButtons(self, nil)
     return true
 end
 
@@ -119,9 +267,12 @@ function KomgaBrowser:pushCatalog(title, item_table, opts)
         opts = opts
     })
     self.catalog_title = title
+    
+    self:autoSetViewMode(item_table)
+    
     self:switchItemTable(title, item_table)
     
-    toggleFilterButton(self, opts)
+    toggleTitleButtons(self, opts)
 end
 
 function KomgaBrowser:getHomeItemTable()

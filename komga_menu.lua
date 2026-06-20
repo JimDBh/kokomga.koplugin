@@ -137,6 +137,40 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    text = "Layout Options",
+                    keep_menu_open = true,
+                    sub_item_table_func = function()
+                        return {
+                            {
+                                text_func = function() return "Default View Mode: " .. (self.plugin.settings.view_mode == "grid" and "Grid" or "List") end,
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
+                                    self.plugin.settings.view_mode = self.plugin.settings.view_mode == "grid" and "list" or "grid"
+                                    self.plugin:saveSettings()
+                                    if touchmenu_instance and touchmenu_instance.updateItems then
+                                        touchmenu_instance:updateItems()
+                                    end
+                                end
+                            },
+                            {
+                                text_func = function() return "List Mode Row Height (" .. (self.plugin.settings.list_row_height or 110) .. ")" end,
+                                keep_menu_open = true,
+                                callback = function() self:promptInput("List Row Height", "list_row_height", true) end
+                            },
+                            {
+                                text_func = function() return "Grid Mode Columns (" .. (self.plugin.settings.grid_columns or 3) .. ")" end,
+                                keep_menu_open = true,
+                                callback = function() self:promptInput("Grid Columns", "grid_columns", true) end
+                            },
+                            {
+                                text_func = function() return "Grid Mode Rows (" .. (self.plugin.settings.grid_rows or 3) .. ")" end,
+                                keep_menu_open = true,
+                                callback = function() self:promptInput("Grid Rows", "grid_rows", true) end
+                            }
+                        }
+                    end
+                },
+                {
                     text = "Never update cached covers",
                     checked_func = function() return self.plugin.settings.never_update_covers end,
                     keep_menu_open = true,
