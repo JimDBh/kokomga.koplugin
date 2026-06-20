@@ -322,14 +322,35 @@ function KomgaAPI:download_book(book_id, dest_filepath)
     return dest_filepath and true or res.body
 end
 
+-- Helper for downloading images without JSON Accept headers
+function KomgaAPI:download_image(path)
+    local url = self.base_url .. path
+    local headers = self:get_headers()
+    headers["Accept"] = "image/jpeg, image/png, image/*"
+    headers["Content-Type"] = nil
+    
+    local res, err = perform_request({
+        url = url,
+        method = "GET",
+        headers = headers,
+        timeout = 10,
+    })
+    
+    if not res or res.code < 200 or res.code >= 300 then
+        return nil, "Failed to download image"
+    end
+    
+    return res.body
+end
+
 -- Download raw series thumbnail/poster
 function KomgaAPI:download_series_thumbnail(series_id)
-    return self:request("/api/v1/series/" .. escape_uri(series_id) .. "/thumbnail")
+    return self:download_image("/api/v1/series/" .. escape_uri(series_id) .. "/thumbnail")
 end
 
 -- Download raw book thumbnail
 function KomgaAPI:download_book_thumbnail(book_id)
-    return self:request("/api/v1/books/" .. escape_uri(book_id) .. "/thumbnail")
+    return self:download_image("/api/v1/books/" .. escape_uri(book_id) .. "/thumbnail")
 end
 
 return KomgaAPI

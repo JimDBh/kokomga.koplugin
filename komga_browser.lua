@@ -144,10 +144,13 @@ function KomgaBrowser:showRecentSeries()
     local series_list = self.plugin.api:get_new_series()
     local item_table = {}
     if series_list and series_list.content then
+        self.plugin.cache:prefetchCovers(series_list.content, "series")
         for _, series in ipairs(series_list.content) do
             table.insert(item_table, {
                 text = series.metadata.title,
-                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end
+                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end,
+                cover_id = series.id,
+                cover_type = "series"
             })
         end
     end
@@ -160,10 +163,13 @@ function KomgaBrowser:showKeepReading()
     local book_list = self.plugin.api:get_books({read_status = "IN_PROGRESS", sort = "readProgress.readDate,desc"})
     local item_table = {}
     if book_list and book_list.content then
+        self.plugin.cache:prefetchCovers(book_list.content, "book")
         for _, book in ipairs(book_list.content) do
             table.insert(item_table, {
                 text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. book.metadata.title,
-                callback = function() self:onBookSelect(book) end
+                callback = function() self:onBookSelect(book) end,
+                cover_id = book.id,
+                cover_type = "book"
             })
         end
     end
@@ -176,10 +182,13 @@ function KomgaBrowser:showOnDeck()
     local book_list = self.plugin.api:get_books_ondeck()
     local item_table = {}
     if book_list and book_list.content then
+        self.plugin.cache:prefetchCovers(book_list.content, "book")
         for _, book in ipairs(book_list.content) do
             table.insert(item_table, {
                 text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. book.metadata.title,
-                callback = function() self:onBookSelect(book) end
+                callback = function() self:onBookSelect(book) end,
+                cover_id = book.id,
+                cover_type = "book"
             })
         end
     end
@@ -192,10 +201,13 @@ function KomgaBrowser:showRecentBooks()
     local book_list = self.plugin.api:get_books({sort = "createdDate,desc"})
     local item_table = {}
     if book_list and book_list.content then
+        self.plugin.cache:prefetchCovers(book_list.content, "book")
         for _, book in ipairs(book_list.content) do
             table.insert(item_table, {
                 text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. book.metadata.title,
-                callback = function() self:onBookSelect(book) end
+                callback = function() self:onBookSelect(book) end,
+                cover_id = book.id,
+                cover_type = "book"
             })
         end
     end
@@ -208,10 +220,13 @@ function KomgaBrowser:showAllSeries()
     local series_list = self.plugin.api:request("/api/v1/series?size=100")
     local item_table = {}
     if series_list and series_list.content then
+        self.plugin.cache:prefetchCovers(series_list.content, "series")
         for _, series in ipairs(series_list.content) do
             table.insert(item_table, {
                 text = series.metadata.title,
-                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end
+                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end,
+                cover_id = series.id,
+                cover_type = "series"
             })
         end
     end
@@ -240,10 +255,14 @@ function KomgaBrowser:showSeriesInLibrary(library_id, library_name)
     local series_list = self.plugin.api:get_series(library_id)
     local item_table = {}
     if series_list and series_list.content then
+        -- get_series already calls prefetchCovers internally if cache is configured, but we force it here for explicit scoping
+        self.plugin.cache:prefetchCovers(series_list.content, "series")
         for _, series in ipairs(series_list.content) do
             table.insert(item_table, {
                 text = series.metadata.title,
-                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end
+                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end,
+                cover_id = series.id,
+                cover_type = "series"
             })
         end
     end
@@ -256,10 +275,13 @@ function KomgaBrowser:showBooksInSeries(series_id, series_title, read_status)
     local book_list = self.plugin.api:get_books_for_series(series_id, {read_status = read_status})
     local item_table = {}
     if book_list and book_list.content then
+        self.plugin.cache:prefetchCovers(book_list.content, "book")
         for _, book in ipairs(book_list.content) do
             table.insert(item_table, {
                 text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. book.metadata.title,
-                callback = function() self:onBookSelect(book) end
+                callback = function() self:onBookSelect(book) end,
+                cover_id = book.id,
+                cover_type = "book"
             })
         end
     end

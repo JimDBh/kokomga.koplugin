@@ -34,11 +34,7 @@ end
 function KomgaCache:mkdir_rec(path)
     local logger = require("logger")
     logger.dbg("KomgaCache:mkdir_rec called with path:", path)
-    local ok_lfs, lfs = pcall(require, "lfs")
-    if not ok_lfs or not lfs then
-        logger.err("KomgaCache:mkdir_rec - lfs module not found")
-        return
-    end
+    local lfs = require("libs/libkoreader-lfs")
     
     local accum = ""
     if path:sub(1,1) == "/" then
@@ -145,11 +141,9 @@ function KomgaCache:getSeries(library_id)
         cache.series[library_id] = sanitize_for_settings(series_page)
         cache.series_time[library_id] = os.time()
         
-        -- Pull cover/thumbnail files if the user enabled cover caching
+        -- Download/precache thumbnails if option is selected
         if self.plugin.settings.cache_covers and series_page.content then
-            for _, series in ipairs(series_page.content) do
-                self:cacheThumbnail("series", series.id, series.lastModified)
-            end
+            self:prefetchCovers(series_page.content, "series")
         end
         
         self.plugin:saveSettings()
@@ -187,9 +181,7 @@ function KomgaCache:getBooks(series_id)
         
         -- Download/precache thumbnails if option is selected
         if self.plugin.settings.cache_covers and books_page.content then
-            for _, book in ipairs(books_page.content) do
-                self:cacheThumbnail("book", book.id, book.lastModified)
-            end
+            self:prefetchCovers(books_page.content, "book")
         end
         
         self.plugin:saveSettings()
@@ -205,7 +197,8 @@ function KomgaCache:cacheThumbnail(type_label, id, lastModifiedString, force)
     local cache = self.plugin.settings.library_metadata_cache
     local cache_key = type_label .. "_" .. id
     
-    local covers_dir = self.plugin:getDownloadDir() .. "/.komga_covers"
+    local DataStorage = require("datastorage")
+    local covers_dir = DataStorage:getDataDir() .. "/komga_covers"
     self:mkdir_rec(covers_dir)
     
     local local_path = covers_dir .. "/" .. cache_key .. ".jpg"
@@ -218,8 +211,10 @@ function KomgaCache:cacheThumbnail(type_label, id, lastModifiedString, force)
         f_test:close()
     end
     
-    if file_exists and cache.covers[cache_key] == lastModifiedString then
-        return local_path
+    if file_exists then
+        if self.plugin.settings.never_update_covers or cache.covers[cache_key] == lastModifiedString then
+            return local_path
+        end
     end
     
     logger.info("[Komga Cache] Fetching and caching cover: " .. cache_key)
@@ -239,6 +234,53 @@ function KomgaCache:cacheThumbnail(type_label, id, lastModifiedString, force)
         end
     end
     return nil
+end
+
+-- Pre-flights a list of items to count missing covers, then downloads them sequentially with a UI blocker
+function KomgaCache:prefetchCovers(item_list, type_label)
+    if not item_list or #item_list == 0 then return end
+    
+    local UIManager = require("ui/uimanager")
+    local InfoMessage = require("ui/widget/infomessage")
+    
+    self:ensureStructure()
+    local cache = self.plugin.settings.library_metadata_cache
+    local DataStorage = require("datastorage")
+    local covers_dir = DataStorage:getDataDir() .. "/komga_covers"
+    
+    local to_download = {}
+    for _, item in ipairs(item_list) do
+        local cache_key = type_label .. "_" .. item.id
+        local local_path = covers_dir .. "/" .. cache_key .. ".jpg"
+        
+        local file_exists = false
+        local f = io.open(local_path, "rb")
+        if f then file_exists = true; f:close() end
+        
+        local needs_download = true
+        if file_exists then
+            if self.plugin.settings.never_update_covers or cache.covers[cache_key] == item.lastModified then
+                needs_download = false
+            end
+        end
+        
+        if needs_download then
+            table.insert(to_download, item)
+        end
+    end
+    
+    if #to_download == 0 then return end
+    
+    logger.info("[Komga Cache] Pre-fetching " .. #to_download .. " covers for " .. type_label)
+    local message = InfoMessage:new{ text = "Downloading " .. #to_download .. " new covers..." }
+    UIManager:show(message)
+    UIManager:forceRePaint()
+    
+    for _, item in ipairs(to_download) do
+        self:cacheThumbnail(type_label, item.id, item.lastModified, true)
+    end
+    
+    UIManager:close(message)
 end
 
 return KomgaCache

@@ -36,11 +36,41 @@ function KomgaListItem:init()
 
     local title_face = Font:getFace("smallinfofont", 20)
     local title_text = self.entry.text or self.entry.title or "Unknown"
+    local text_width = self.width - 20
+    
+    local cover_widget
+    if self.entry.cover_id and self.entry.cover_type then
+        local DataStorage = require("datastorage")
+        local lfs = require("libs/libkoreader-lfs")
+        local covers_dir = DataStorage:getDataDir() .. "/komga_covers"
+        local cache_key = self.entry.cover_type .. "_" .. self.entry.cover_id
+        local local_path = covers_dir .. "/" .. cache_key .. ".jpg"
+        
+        if lfs.attributes(local_path, "mode") == "file" then
+            local ImageWidget = require("ui/widget/imagewidget")
+            cover_widget = ImageWidget:new{
+                file = local_path,
+                width = 64,
+                height = 96,
+                alpha = true,
+            }
+        else
+            -- Placeholder when cover is missing but expected
+            cover_widget = CenterContainer:new{
+                dimen = Geom:new{ w = 64, h = 96 },
+                TextWidget:new{
+                    text = "📖",
+                    face = Font:getFace("cfont", 30),
+                }
+            }
+        end
+        text_width = self.width - 20 - 64 - 15 -- Adjust text width to leave room for cover + spacing
+    end
     
     local title_widget = TextBoxWidget:new{
         text = title_text,
         face = title_face,
-        width = self.width - 20,
+        width = text_width,
         alignment = "left",
         bold = true,
     }
@@ -49,20 +79,24 @@ function KomgaListItem:init()
         align = "left",
         title_widget,
     }
+    
+    local row_elements = { align = "center" }
+    if cover_widget then
+        table.insert(row_elements, cover_widget)
+        table.insert(row_elements, HorizontalSpan:new{ width = 15 })
+    end
+    table.insert(row_elements, text_group)
 
     local content_frame = FrameContainer:new{
         width = self.width,
         height = self.height - 1,
-        padding = 10,
+        padding = 5,
         margin = 0,
         bordersize = 0,
         background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{
-            dimen = Geom:new{ w = self.width - 20, h = self.height - 1 - 20 },
-            HorizontalGroup:new{
-                align = "center",
-                text_group,
-            }
+            dimen = Geom:new{ w = self.width - 10, h = self.height - 1 - 10 },
+            HorizontalGroup:new(row_elements)
         }
     }
 
@@ -90,10 +124,24 @@ function KomgaListItem:free()
 end
 
 local KomgaListMenu = Menu:extend{
-    item_height = 80,
+    item_height = 110,
 }
 
 function KomgaListMenu:_recalculateDimen()
+    -- Dynamically determine row height based on whether any item has a cover
+    local has_covers = false
+    if self.item_table then
+        for _, item in ipairs(self.item_table) do
+            if item.cover_id then
+                has_covers = true
+                break
+            end
+        end
+    end
+    
+    -- Compact height for text-only menus, tall height for cover menus
+    self.item_height = has_covers and 110 or 70
+
     -- Calculate available dimensions for the list
     local available_width = self.inner_dimen.w
     local available_height = self.inner_dimen.h

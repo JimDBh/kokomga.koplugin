@@ -137,6 +137,15 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    text = "Never update cached covers",
+                    checked_func = function() return self.plugin.settings.never_update_covers end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.never_update_covers = not self.plugin.settings.never_update_covers
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
                     text = "Clean Cache",
                     keep_menu_open = true,
                     callback = function()

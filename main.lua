@@ -55,6 +55,7 @@ local DEFAULT_SETTINGS = {
     cache_expiry_policy = "smart", 
     cache_expiry_mins = 60,
     cache_covers = false,
+    never_update_covers = false,
     library_metadata_cache = {}
 }
 
