@@ -141,7 +141,7 @@ function KomgaSync:matchCurrentBook()
 end
 
 -- Sync progress from Komga
-function KomgaSync:pullProgress(ui, is_manual)
+function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
     if not self.plugin.settings.use_komga_sync then return false end
     if not self.plugin.api or not ui or not ui.document then return false end
     
@@ -155,66 +155,78 @@ function KomgaSync:pullProgress(ui, is_manual)
         return false
     end
     
-    if is_manual then self.plugin:notify("Checking server progress...", "info") end
-    
-    logger.info("KomgaSync: Executing pullProgress for book", book_id)
-    
-    local progress, p_err = self.plugin.api:get_read_progress(book_id)
-    if p_err then 
-        logger.err("KomgaSync: Failed to pull progress -", tostring(p_err))
-        return false -- FAILED to get komga progress
-    end
-    if type(progress) ~= "table" then
-        logger.info("KomgaSync: Book found but no progress recorded on server (progress type is", type(progress), ")")
+    local function do_pull()
+        if is_manual then self.plugin:notify("Checking server progress...", "info") end
+        
+        logger.info("KomgaSync: Executing pullProgress for book", book_id)
+        
+        local progress, p_err = self.plugin.api:get_read_progress(book_id)
+        if p_err then 
+            logger.err("KomgaSync: Failed to pull progress -", tostring(p_err))
+            return false -- FAILED to get komga progress
+        end
+        if type(progress) ~= "table" then
+            logger.info("KomgaSync: Book found but no progress recorded on server (progress type is", type(progress), ")")
+            return true
+        end
+        
+        logger.info("KomgaSync: Pulled progress from server:", progress.page or "None")
+        
+        if not progress.page then 
+            logger.info("KomgaSync: Book found but progress.page is missing")
+            return true -- Server responded successfully but 0% progress
+        end
+        
+        local remote_page = progress.page
+        local current_page = ui.view and ui.view.state and ui.view.state.page or 1
+        
+        if remote_page == current_page then
+            if is_manual then self.plugin:notify("Already at server progress", "info") end
+            return true
+        end
+        
+        local PluginLoader = require("pluginloader")
+        local kosync = PluginLoader:getPluginInstance("kosync")
+        
+        local strategy
+        local newer_msg
+        if remote_page > current_page then
+            strategy = (kosync and kosync.settings.sync_forward) or 1
+            newer_msg = "Server is ahead"
+        else
+            strategy = (kosync and kosync.settings.sync_backward) or 1
+            newer_msg = "Server is behind"
+        end
+        
+        if strategy == 1 then -- Prompt
+            local ConfirmBox = require("ui/widget/confirmbox")
+            local UIManager = require("ui/uimanager")
+            local Event = require("ui/event")
+            UIManager:show(ConfirmBox:new{
+                text = newer_msg .. " (Page " .. remote_page .. "). Jump?",
+                ok_callback = function()
+                    UIManager:broadcastEvent(Event:new("GotoPage", remote_page))
+                end,
+            })
+        elseif strategy == 2 then -- Silently update
+            local UIManager = require("ui/uimanager")
+            local Event = require("ui/event")
+            UIManager:broadcastEvent(Event:new("GotoPage", remote_page))
+            if is_manual then self.plugin:notify("Jumped to Page " .. remote_page, "info") end
+        end
+        
         return true
     end
-    
-    logger.info("KomgaSync: Pulled progress from server:", progress.page or "None")
-    
-    if not progress.page then 
-        logger.info("KomgaSync: Book found but progress.page is missing")
-        return true -- Server responded successfully but 0% progress
+
+    if ensure_networking ~= false then
+        local NetworkMgr = require("ui/network/manager")
+        if NetworkMgr:willRerunWhenOnline(do_pull) then
+            logger.info("KomgaSync: Network offline, pullProgress queued for when online.")
+            return false
+        end
     end
-    
-    local remote_page = progress.page
-    local current_page = ui.view and ui.view.state and ui.view.state.page or 1
-    
-    if remote_page == current_page then
-        if is_manual then self.plugin:notify("Already at server progress", "info") end
-        return true
-    end
-    
-    local PluginLoader = require("pluginloader")
-    local kosync = PluginLoader:getPluginInstance("kosync")
-    
-    local strategy
-    local newer_msg
-    if remote_page > current_page then
-        strategy = (kosync and kosync.settings.sync_forward) or 1
-        newer_msg = "Server is ahead"
-    else
-        strategy = (kosync and kosync.settings.sync_backward) or 1
-        newer_msg = "Server is behind"
-    end
-    
-    if strategy == 1 then -- Prompt
-        local ConfirmBox = require("ui/widget/confirmbox")
-        local UIManager = require("ui/uimanager")
-        local Event = require("ui/event")
-        UIManager:show(ConfirmBox:new{
-            text = newer_msg .. " (Page " .. remote_page .. "). Jump?",
-            ok_callback = function()
-                UIManager:broadcastEvent(Event:new("GotoPage", remote_page))
-            end,
-        })
-    elseif strategy == 2 then -- Silently update
-        local UIManager = require("ui/uimanager")
-        local Event = require("ui/event")
-        UIManager:broadcastEvent(Event:new("GotoPage", remote_page))
-        if is_manual then self.plugin:notify("Jumped to Page " .. remote_page, "info") end
-    end
-    
-    return true
+
+    return do_pull()
 end
 
 -- Push progress to Komga
@@ -229,7 +241,7 @@ function KomgaSync:pushProgress(book_id, current_page, total_pages, is_quiet)
     end
 end
 
-function KomgaSync:pushProgressForDocument(ui, is_quiet)
+function KomgaSync:pushProgressForDocument(ui, is_quiet, ensure_networking)
     if not self.plugin.api or not ui or not ui.document then return end
     local filepath = ui.document.file
     if not filepath then return end
@@ -245,10 +257,12 @@ function KomgaSync:pushProgressForDocument(ui, is_quiet)
         self:pushProgress(book_id, current_page, total_pages, is_quiet)
     end
     
-    local NetworkMgr = require("ui/network/manager")
-    if NetworkMgr:willRerunWhenOnline(do_push) then
-        logger.info("KomgaSync: Network offline, pushProgress queued for when online.")
-        return
+    if ensure_networking ~= false then
+        local NetworkMgr = require("ui/network/manager")
+        if NetworkMgr:willRerunWhenOnline(do_push) then
+            logger.info("KomgaSync: Network offline, pushProgress queued for when online.")
+            return
+        end
     end
     
     do_push()
@@ -426,6 +440,45 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
             -- Also push the 100% progress up to the Komga server
             self:pushProgressForDocument(ui, true)
         end
+    end
+
+    local NetworkMgr = require("ui/network/manager")
+    local UIManager = require("ui/uimanager")
+    local ButtonDialog = require("ui/widget/buttondialog")
+
+    if not NetworkMgr:isOnline() then
+        local dialog
+        dialog = ButtonDialog:new{
+            title = "No Wi-Fi connection. Cannot check for the next chapter.",
+            buttons = {
+                {
+                    {
+                        text = "Open Next Chapter",
+                        enabled = false,
+                        callback = function() end
+                    }
+                },
+                {
+                    {
+                        text = "Default Action",
+                        callback = function()
+                            UIManager:close(dialog)
+                            if show_native_func then
+                                show_native_func()
+                            end
+                        end
+                    },
+                    {
+                        text = "Cancel",
+                        callback = function()
+                            UIManager:close(dialog)
+                        end
+                    }
+                }
+            }
+        }
+        UIManager:show(dialog)
+        return true
     end
 
     -- Get the next book directly using Komga's native endpoint (404 → nil = no next book)

@@ -195,7 +195,7 @@ function KomgaPlugin:onReaderReady()
                 if current_filepath then
                     local book_id = self.sync:getOrMatchBook(current_filepath)
                     if book_id then
-                        local success = self.sync:pullProgress(self.ui, interactive)
+                        local success = self.sync:pullProgress(self.ui, interactive, false)
                         if success then
                             logger.info("KomgaPlugin: Intercepted KOSync and used Komga sync")
                             return -- Komga handled it (or found 0 progress), inhibit KOSync
@@ -220,6 +220,27 @@ function KomgaPlugin:onReaderReady()
         end
     end
 
+    if self.ui.kosync and not self.orig_kosync_updateProgress then
+        self.orig_kosync_updateProgress = self.ui.kosync.updateProgress
+        
+        self.ui.kosync.updateProgress = function(kosync_instance, ensure_networking, interactive, on_suspend)
+            logger.info("KomgaPlugin: Intercepted KOSync:updateProgress (ensure_networking=" .. tostring(ensure_networking) .. ")")
+            local current_filepath = self.ui.document and self.ui.document.file
+            if current_filepath then
+                local book_id = self.sync:getOrMatchBook(current_filepath)
+                if book_id then
+                    -- This is a Komga book, so we push progress to Komga instead of KOReader's sync server
+                    self.sync:pushProgressForDocument(self.ui, not interactive, ensure_networking)
+                    return
+                end
+            end
+            
+            -- Fallback to native KOSync
+            logger.info("KomgaPlugin: Falling back to native KOSync:updateProgress")
+            return self.orig_kosync_updateProgress(kosync_instance, ensure_networking, interactive, on_suspend)
+        end
+    end
+
     
     -- If KOSync is present but its auto_sync is off, it won't schedule an automatic pull.
     -- We force schedule one here so our interceptor catches it and Komga still auto-pulls!
@@ -241,7 +262,14 @@ function KomgaPlugin:onPageUpdate(page)
             self.last_synced_page = page
             local ui = self.ui
             if ui then
-                self.sync:pushProgressForDocument(ui, true)
+                local NetworkMgr = require("ui/network/manager")
+                if NetworkMgr:isOnline() then
+                    self.sync:pushProgressForDocument(ui, true, false)
+                    self.is_dirty = false
+                else
+                    self.is_dirty = true
+                    logger.info("KomgaPlugin: Device offline, progress sync marked dirty for later.")
+                end
             end
         end
     end
@@ -258,7 +286,59 @@ function KomgaPlugin:onCloseDocument()
     local ui = self.ui
     local filepath = ui and ui.document and ui.document.file
     if filepath then
-        self.sync:pushProgressForDocument(ui, true)
+        local NetworkMgr = require("ui/network/manager")
+        NetworkMgr:goOnlineToRun(function()
+            self.sync:pushProgressForDocument(ui, true, false)
+        end)
+    end
+end
+
+function KomgaPlugin:onResume()
+    if not self.is_active then return end
+    if not self.ui.kosync then
+        UIManager:scheduleIn(1, function()
+            if self.is_active and self.ui then
+                self.sync:pullProgress(self.ui, false, true)
+            end
+        end)
+    end
+end
+
+function KomgaPlugin:onSuspend()
+    if not self.is_active then return end
+    if not self.ui.kosync then
+        local ui = self.ui
+        if ui and ui.document and ui.document.file then
+            self.sync:pushProgressForDocument(ui, true, true)
+        end
+    end
+end
+
+function KomgaPlugin:onNetworkConnected()
+    if not self.is_active then return end
+    if self.is_dirty then
+        local ui = self.ui
+        if ui and ui.document and ui.document.file then
+            self.sync:pushProgressForDocument(ui, true, false)
+            self.is_dirty = false
+        end
+    end
+    if not self.ui.kosync then
+        UIManager:scheduleIn(0.5, function()
+            if self.is_active and self.ui then
+                self.sync:pullProgress(self.ui, false, false)
+            end
+        end)
+    end
+end
+
+function KomgaPlugin:onNetworkDisconnecting()
+    if not self.is_active then return end
+    if not self.ui.kosync then
+        local ui = self.ui
+        if ui and ui.document and ui.document.file then
+            self.sync:pushProgressForDocument(ui, true, false)
+        end
     end
 end
 
