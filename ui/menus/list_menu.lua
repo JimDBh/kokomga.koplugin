@@ -157,6 +157,10 @@ function KomgaListMenu:_recalculateDimen()
     if self.page_info then
         available_height = available_height - self.page_info:getSize().h
     end
+    
+    -- Add a small padding at the bottom so the last item's delimiter isn't masked
+    local Screen = require("device").screen
+    available_height = available_height - Screen:scaleBySize(10)
 
     -- Dynamically determine row height based on whether any item has a cover
     local has_covers = false
