@@ -40,8 +40,8 @@ function KomgaGridItem:init()
             GestureRange:new{ ges = "tap", range = self.dimen },
         },
     }
-
-    local title_text = self.entry.text or self.entry.title or "Unknown"
+    local _ = self.menu and self.menu.plugin and self.menu.plugin.i18n and self.menu.plugin.i18n._ or function(s) return s end
+    local title_text = self.entry.text or self.entry.title or _("Unknown")
     local text_width = self.width - (GRID_LAYOUT.padding * 2)
     
     local cover_widget

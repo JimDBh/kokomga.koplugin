@@ -35,6 +35,8 @@ end
 local function toggleTitleButtons(browser, opts)
     local title_bar = browser.title_bar
     if not title_bar then return end
+    local _ = browser.plugin.i18n._
+    local T = browser.plugin.i18n.T
 
     local is_home = (#browser.paths == 0)
     
@@ -63,7 +65,7 @@ local function toggleTitleButtons(browser, opts)
             local current_mode = browser.view_mode
             
             table.insert(buttons, { {
-                text = current_mode == "grid" and "Switch to List View" or "Switch to Grid View",
+                text = current_mode == "grid" and _("Switch to List View") or _("Switch to Grid View"),
                 callback = function()
                     if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
                     local new_mode = current_mode == "grid" and "list" or "grid"
@@ -83,8 +85,8 @@ local function toggleTitleButtons(browser, opts)
                     input = tostring(browser.plugin.settings[key] or default_val),
                     buttons = {
                         {
-                            { text = "Cancel", callback = function() UIManager:close(dialog) end },
-                            { text = "Save", callback = function()
+                            { text = _("Cancel"), callback = function() UIManager:close(dialog) end },
+                            { text = _("Save"), callback = function()
                                 local val = tonumber(dialog:getInputText())
                                 if val then
                                     browser.plugin.settings[key] = val
@@ -98,31 +100,31 @@ local function toggleTitleButtons(browser, opts)
                 }
                 return dialog
             end
-
+ 
             if current_mode == "list" then
                 table.insert(buttons, { {
-                    text = "List Rows",
+                    text = _("List Rows"),
                     callback = function()
                         if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
-                        UIManager:show(createSettingDialog("List Rows", "list_rows", 5))
+                        UIManager:show(createSettingDialog(_("List Rows"), "list_rows", 5))
                     end,
                     align = "left",
                 } })
             else
                 table.insert(buttons, { {
-                    text = "Grid Columns",
+                    text = _("Grid Columns"),
                     callback = function()
                         if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
-                        UIManager:show(createSettingDialog("Grid Columns", "grid_columns", 3))
+                        UIManager:show(createSettingDialog(_("Grid Columns"), "grid_columns", 3))
                     end,
                     align = "left",
                 } })
                 
                 table.insert(buttons, { {
-                    text = "Grid Rows",
+                    text = _("Grid Rows"),
                     callback = function()
                         if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
-                        UIManager:show(createSettingDialog("Grid Rows", "grid_rows", 3))
+                        UIManager:show(createSettingDialog(_("Grid Rows"), "grid_rows", 3))
                     end,
                     align = "left",
                 } })
@@ -131,7 +133,7 @@ local function toggleTitleButtons(browser, opts)
             if opts and opts.is_series then
                 table.insert(buttons, {})
                 table.insert(buttons, { {
-                    text = "Filter Series",
+                    text = _("Filter Series"),
                     callback = function()
                         if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
                         browser:showFilterDialog(opts.series_id, opts.original_title, opts.read_status)
@@ -298,7 +300,7 @@ function KomgaBrowser:setViewMode(mode, save_preference)
             for i = #self.item_table, 1, -1 do self.item_table[i] = nil end
             for _, item in ipairs(new_items) do table.insert(self.item_table, item) end
             if #self.item_table == 0 then
-                table.insert(self.item_table, { text = "Nothing found" })
+                table.insert(self.item_table, { text = self.plugin.i18n._("Nothing found") })
                 p.total_pages = 1
             end
         end
@@ -405,6 +407,7 @@ end
 --   push_opts    : table   (merged with _pagination before pushCatalog)
 -- }
 function KomgaBrowser:_loadCatalog(args)
+    local _ = self.plugin.i18n._
     local page_size = self:getPageSize(args.cover_type ~= nil)
     local response = args.fetch_func(0, page_size)
 
@@ -430,7 +433,7 @@ function KomgaBrowser:_loadCatalog(args)
         end
     end
     if #item_table == 0 then
-        table.insert(item_table, { text = args.empty_text or "Nothing found" })
+        table.insert(item_table, { text = args.empty_text and _(args.empty_text) or _("Nothing found") })
         total_pages = 1
     end
 
@@ -463,7 +466,7 @@ function KomgaBrowser:_loadCatalog(args)
         }
     end
 
-    self:pushCatalog(args.title, item_table, push_opts)
+    self:pushCatalog(args.title and _(args.title) or "", item_table, push_opts)
 end
 
 -- ---------------------------------------------------------------------------
@@ -471,13 +474,14 @@ end
 -- ---------------------------------------------------------------------------
 
 function KomgaBrowser:getHomeItemTable()
+    local _ = self.plugin.i18n._
     return {
-        { text = "Keep Reading",          callback = function() self:showKeepReading() end },
-        { text = "On Deck",               callback = function() self:showOnDeck() end },
-        { text = "Recently Added Series", callback = function() self:showRecentSeries() end },
-        { text = "Recently Added Books",  callback = function() self:showRecentBooks() end },
-        { text = "All Series",            callback = function() self:showAllSeries() end },
-        { text = "Libraries",             callback = function() self:showLibraries() end },
+        { text = _("Keep Reading"),          callback = function() self:showKeepReading() end },
+        { text = _("On Deck"),               callback = function() self:showOnDeck() end },
+        { text = _("Recently Added Series"), callback = function() self:showRecentSeries() end },
+        { text = _("Recently Added Books"),  callback = function() self:showRecentBooks() end },
+        { text = _("All Series"),            callback = function() self:showAllSeries() end },
+        { text = _("Libraries"),             callback = function() self:showLibraries() end },
     }
 end
 
@@ -488,7 +492,7 @@ end
 function KomgaBrowser:showRecentSeries()
     if not self.plugin.api then return end
     self:_loadCatalog{
-        title = "Recent Series",
+        title = "Recently Added Series",
         fetch_func = function(page, size) return self.plugin.api:get_new_series(page, size) end,
         item_builder = function(series)
             return {
@@ -544,7 +548,7 @@ end
 function KomgaBrowser:showRecentBooks()
     if not self.plugin.api then return end
     self:_loadCatalog{
-        title = "Recent Books",
+        title = "Recently Added Books",
         fetch_func = function(page, size)
             return self.plugin.api:get_books({sort = "createdDate,desc"}, page, size)
         end,
@@ -616,13 +620,14 @@ end
 
 function KomgaBrowser:showBooksInSeries(series_id, series_title, read_status)
     if not self.plugin.api then return end
+    local _ = self.plugin.i18n._
 
     local display_title = series_title
     if read_status then
         local status_map = {
-            ["UNREAD"] = "Unread",
-            ["IN_PROGRESS"] = "In Progress",
-            ["READ"] = "Completed"
+            ["UNREAD"] = _("Unread"),
+            ["IN_PROGRESS"] = _("In Progress"),
+            ["READ"] = _("Completed")
         }
         local status_str = ""
         if type(read_status) == "table" then
@@ -668,6 +673,8 @@ end
 function KomgaBrowser:showFilterDialog(series_id, series_title, current_status)
     local ButtonDialog = require("ui/widget/buttondialog")
     local dialog
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
     
     local selected = {}
     if current_status and type(current_status) == "table" then
@@ -699,16 +706,16 @@ function KomgaBrowser:showFilterDialog(series_id, series_title, current_status)
     end
     
     dialog = ButtonDialog:new{
-        title = "Filter: " .. series_title,
+        title = T(_("Filter: %1"), series_title),
         buttons = {
             {
-                { text = "Unread",      checked_func = function() return selected["UNREAD"] end,      callback = toggle_action("UNREAD") },
-                { text = "In Progress", checked_func = function() return selected["IN_PROGRESS"] end, callback = toggle_action("IN_PROGRESS") },
-                { text = "Completed",   checked_func = function() return selected["READ"] end,        callback = toggle_action("READ") }
+                { text = _("Unread"),      checked_func = function() return selected["UNREAD"] end,      callback = toggle_action("UNREAD") },
+                { text = _("In Progress"), checked_func = function() return selected["IN_PROGRESS"] end, callback = toggle_action("IN_PROGRESS") },
+                { text = _("Completed"),   checked_func = function() return selected["READ"] end,        callback = toggle_action("READ") }
             },
             {
-                { text = "Apply Filter", callback = apply_action() },
-                { text = "Cancel",       callback = function() UIManager:close(dialog) end }
+                { text = _("Apply Filter"), callback = apply_action() },
+                { text = _("Cancel"),       callback = function() UIManager:close(dialog) end }
             }
         }
     }
@@ -722,13 +729,15 @@ end
 function KomgaBrowser:onBookSelect(book)
     local title = book.metadata and book.metadata.title or book.name or "this book"
     local ConfirmBox = require("ui/widget/confirmbox")
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
     UIManager:show(ConfirmBox:new{
-        text = "Download '" .. title .. "'?",
+        text = T(_("Download '%1'?"), title),
         ok_callback = function()
             if self.plugin and self.plugin.sync then
                 self.plugin.sync:downloadBook(book, book.seriesTitle)
             else
-                self.plugin:notify("Sync module not initialized", "error")
+                self.plugin:notify(_("Sync module not initialized"), "error")
             end
         end,
     })

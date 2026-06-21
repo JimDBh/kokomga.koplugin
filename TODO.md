@@ -23,7 +23,7 @@
 
 ## Plugin Infrastructure
 - [x] Create `_meta.lua` file for plugin metadata
-- [ ] Implement i18n (Internationalization) support
+- [x] Implement i18n (Internationalization) support
 
 ## API & Data
 - [ ] `match_book` falls back to `content[1]` on no match — can return wrong book (false positive)

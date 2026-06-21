@@ -17,25 +17,27 @@ end
 
 -- Plugin settings sub-menu
 function KomgaMenu:createSettingsMenu()
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
     local submenu = {}
     
     table.insert(submenu, {
-        text = "Server Setup",
+        text = _("Server Setup"),
         keep_menu_open = true,
         sub_item_table_func = function()
             return {
                 {
-                    text = "Server URL",
+                    text = _("Server URL"),
                     keep_menu_open = true,
-                    callback = function() self:promptInput("Server URL", "server_url") end
+                    callback = function() self:promptInput(_("Server URL"), "server_url") end
                 },
                 {
-                    text = "API Key",
+                    text = _("API Key"),
                     keep_menu_open = true,
-                    callback = function() self:promptInput("API Key", "api_key") end
+                    callback = function() self:promptInput(_("API Key"), "api_key") end
                 },
                 {
-                    text = "Auto-Generate API Key",
+                    text = _("Auto-Generate API Key"),
                     keep_menu_open = true,
                     callback = function() self:promptAutoGenerate() end
                 }
@@ -44,22 +46,22 @@ function KomgaMenu:createSettingsMenu()
     })
 
     table.insert(submenu, {
-        text = "Options",
+        text = _("Options"),
         keep_menu_open = true,
         sub_item_table_func = function()
             return {
                 {
-                    text = "Custom Download Dir",
+                    text = _("Custom Download Dir"),
                     keep_menu_open = true,
-                    callback = function() self:promptInput("Download Dir (e.g. /sdcard/Books/Komga)", "download_dir") end
+                    callback = function() self:promptInput(_("Custom Download Dir"), "download_dir") end
                 },
                 {
-                    text = "Sync behavior",
+                    text = _("Sync behavior"),
                     keep_menu_open = true,
                     sub_item_table_func = function()
                         return {
                             {
-                                text = "Use Komga server progress when available",
+                                text = _("Use Komga server progress when available"),
                                 checked_func = function() return self.plugin.settings.use_komga_sync end,
                                 keep_menu_open = true,
                                 callback = function()
@@ -70,16 +72,16 @@ function KomgaMenu:createSettingsMenu()
                             {
                                 text_func = function()
                                     local pages = self.plugin.settings.sync_interval_pages or 5
-                                    return "Auto-push progress every " .. pages .. " pages"
+                                    return T(_("Auto-push progress every %1 pages"), pages)
                                 end,
                                 keep_menu_open = true,
-                                callback = function() self:promptInput("Update frequency (X pages, 0 to disable)", "sync_interval_pages", true) end
+                                callback = function() self:promptInput(_("Auto-push progress every %1 pages"), "sync_interval_pages", true) end
                             }
                         }
                     end
                 },
                 {
-                    text = "Auto RTL for Komga books",
+                    text = _("Auto RTL for Komga books"),
                     checked_func = function() return self.plugin.settings.auto_rtl_direction end,
                     keep_menu_open = true,
                     callback = function()
@@ -88,7 +90,7 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
-                    text = "Download into Series Subfolders",
+                    text = _("Download into Series Subfolders"),
                     checked_func = function() return self.plugin.settings.download_to_subfolder end,
                     keep_menu_open = true,
                     callback = function()
@@ -97,12 +99,14 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
-                    text = "Layout Options",
+                    text = _("Layout Options"),
                     keep_menu_open = true,
                     sub_item_table_func = function()
                         return {
                             {
-                                text_func = function() return "Default View Mode: " .. (self.plugin.settings.view_mode == "grid" and "Grid" or "List") end,
+                                text_func = function()
+                                    return self.plugin.settings.view_mode == "grid" and _("Default View Mode: Grid") or _("Default View Mode: List")
+                                end,
                                 keep_menu_open = true,
                                 callback = function(touchmenu_instance)
                                     self.plugin.settings.view_mode = self.plugin.settings.view_mode == "grid" and "list" or "grid"
@@ -113,25 +117,25 @@ function KomgaMenu:createSettingsMenu()
                                 end
                             },
                             {
-                                text_func = function() return "List Mode Rows (" .. (self.plugin.settings.list_rows or 5) .. ")" end,
+                                text_func = function() return T(_("List Mode Rows (%1)"), self.plugin.settings.list_rows or 5) end,
                                 keep_menu_open = true,
-                                callback = function() self:promptInput("List Rows", "list_rows", true) end
+                                callback = function() self:promptInput(_("List Rows"), "list_rows", true) end
                             },
                             {
-                                text_func = function() return "Grid Mode Columns (" .. (self.plugin.settings.grid_columns or 3) .. ")" end,
+                                text_func = function() return T(_("Grid Mode Columns (%1)"), self.plugin.settings.grid_columns or 3) end,
                                 keep_menu_open = true,
-                                callback = function() self:promptInput("Grid Columns", "grid_columns", true) end
+                                callback = function() self:promptInput(_("Grid Columns"), "grid_columns", true) end
                             },
                             {
-                                text_func = function() return "Grid Mode Rows (" .. (self.plugin.settings.grid_rows or 3) .. ")" end,
+                                text_func = function() return T(_("Grid Mode Rows (%1)"), self.plugin.settings.grid_rows or 3) end,
                                 keep_menu_open = true,
-                                callback = function() self:promptInput("Grid Rows", "grid_rows", true) end
+                                callback = function() self:promptInput(_("Grid Rows"), "grid_rows", true) end
                             }
                         }
                     end
                 },
                 {
-                    text = "Never update cached covers",
+                    text = _("Never update cached covers"),
                     checked_func = function() return self.plugin.settings.never_update_covers end,
                     keep_menu_open = true,
                     callback = function()
@@ -140,11 +144,11 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
-                    text = "Clean Cache",
+                    text = _("Clean Cache"),
                     keep_menu_open = true,
                     callback = function()
                         self.plugin.cache:clear()
-                        self.plugin:notify("Cache cleared", "info")
+                        self.plugin:notify(_("Cache cleared"), "info")
                     end
                 }
             }
@@ -152,7 +156,7 @@ function KomgaMenu:createSettingsMenu()
     })
 
     table.insert(submenu, {
-        text = "Komga Browser",
+        text = _("Komga Browser"),
         callback = function()
             local NetworkMgr = require("ui/network/manager")
             NetworkMgr:runWhenOnline(function()
@@ -178,6 +182,8 @@ end
 
 -- UI prompt helper
 function KomgaMenu:promptInput(title, setting_key, is_number)
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
     local input
     input = InputDialog:new{
         title = title,
@@ -185,20 +191,20 @@ function KomgaMenu:promptInput(title, setting_key, is_number)
         buttons = {
             {
                 {
-                    text = "Cancel",
+                    text = _("Cancel"),
                     id = "close",
                     callback = function()
                         UIManager:close(input)
                     end,
                 },
                 {
-                    text = "Save",
+                    text = _("Save"),
                     callback = function()
                         local value = input:getInputValue()
                         if is_number then
                             value = tonumber(value)
                             if not value then
-                                self.plugin:notify("Invalid number", "error")
+                                self.plugin:notify(_("Invalid number"), "error")
                                 return
                             end
                         end
@@ -207,7 +213,7 @@ function KomgaMenu:promptInput(title, setting_key, is_number)
                         if setting_key == "server_url" or setting_key == "api_key" then
                             self.plugin:initAPI()
                         end
-                        self.plugin:notify("Updated " .. title, "info")
+                        self.plugin:notify(T(_("Updated %1"), title), "info")
                         UIManager:close(input)
                     end,
                 },
@@ -219,21 +225,22 @@ function KomgaMenu:promptInput(title, setting_key, is_number)
 end
 
 function KomgaMenu:promptSetup(on_success_callback)
+    local _ = self.plugin.i18n._
     local ButtonDialog = require("ui/widget/buttondialog")
     local dialog
     dialog = ButtonDialog:new{
-        title = "Komga is not configured. Please set up connection.",
+        title = _("Komga is not configured. Please set up connection."),
         buttons = {
             {
                 {
-                    text = "Manual Setup",
+                    text = _("Manual Setup"),
                     callback = function()
                         UIManager:close(dialog)
                         self:promptManualSetup(on_success_callback)
                     end
                 },
                 {
-                    text = "Auto-Generate API Key",
+                    text = _("Auto-Generate API Key"),
                     callback = function()
                         UIManager:close(dialog)
                         self:promptAutoGenerate(on_success_callback)
@@ -242,7 +249,7 @@ function KomgaMenu:promptSetup(on_success_callback)
             },
             {
                 {
-                    text = "Cancel",
+                    text = _("Cancel"),
                     callback = function()
                         UIManager:close(dialog)
                     end
@@ -254,30 +261,31 @@ function KomgaMenu:promptSetup(on_success_callback)
 end
 
 function KomgaMenu:promptManualSetup(on_success_callback)
+    local _ = self.plugin.i18n._
     local dialog
     dialog = MultiInputDialog:new{
-        title = "Manual Server Setup",
+        title = _("Manual Server Setup"),
         fields = {
             {
                 text = self.plugin.settings.server_url or "http://",
-                hint = "Server URL",
+                hint = _("Server URL"),
             },
             {
                 text = self.plugin.settings.api_key or "",
-                hint = "API Key",
+                hint = _("API Key"),
             }
         },
         buttons = {
             {
                 {
-                    text = "Cancel",
+                    text = _("Cancel"),
                     id = "close",
                     callback = function()
                         UIManager:close(dialog)
                     end
                 },
                 {
-                    text = "Save",
+                    text = _("Save"),
                     is_enter_default = true,
                     callback = function()
                         local url, api_key = unpack(dialog:getFields())
@@ -286,11 +294,11 @@ function KomgaMenu:promptManualSetup(on_success_callback)
                         api_key = util.trim(api_key)
                         
                         if url == "" then
-                            self.plugin:notify("Server URL cannot be empty", "error")
+                            self.plugin:notify(_("Server URL cannot be empty"), "error")
                             return
                         end
                         if api_key == "" then
-                            self.plugin:notify("API Key cannot be empty", "error")
+                            self.plugin:notify(_("API Key cannot be empty"), "error")
                             return
                         end
                         
@@ -300,7 +308,7 @@ function KomgaMenu:promptManualSetup(on_success_callback)
                         self.plugin:initAPI()
                         
                         UIManager:close(dialog)
-                        self.plugin:notify("Server connection saved", "info")
+                        self.plugin:notify(_("Server connection saved"), "info")
                         if on_success_callback then
                             on_success_callback()
                         end
@@ -314,33 +322,35 @@ function KomgaMenu:promptManualSetup(on_success_callback)
 end
 
 function KomgaMenu:promptAutoGenerate(on_success_callback)
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
     local dialog
     dialog = MultiInputDialog:new{
-        title = "Auto-Generate API Key",
+        title = _("Auto-Generate API Key"),
         fields = {
             {
                 text = self.plugin.settings.server_url or "http://",
-                hint = "Server URL",
+                hint = _("Server URL"),
             },
             {
-                hint = "Username/Email",
+                hint = _("Username/Email"),
             },
             {
-                hint = "Password",
+                hint = _("Password"),
                 text_type = "password",
             }
         },
         buttons = {
             {
                 {
-                    text = "Cancel",
+                    text = _("Cancel"),
                     id = "close",
                     callback = function()
                         UIManager:close(dialog)
                     end
                 },
                 {
-                    text = "Generate",
+                    text = _("Generate"),
                     is_enter_default = true,
                     callback = function()
                         local url, username, password = unpack(dialog:getFields())
@@ -349,11 +359,11 @@ function KomgaMenu:promptAutoGenerate(on_success_callback)
                         username = util.trim(username)
                         
                         if url == "" then
-                            self.plugin:notify("Server URL cannot be empty", "error")
+                            self.plugin:notify(_("Server URL cannot be empty"), "error")
                             return
                         end
                         if username == "" or password == "" then
-                            self.plugin:notify("Username and Password are required", "error")
+                            self.plugin:notify(_("Username and Password are required"), "error")
                             return
                         end
                         
@@ -362,7 +372,7 @@ function KomgaMenu:promptAutoGenerate(on_success_callback)
                         local NetworkMgr = require("ui/network/manager")
                         NetworkMgr:runWhenOnline(function()
                             UIManager:show(require("ui/widget/infomessage"):new{
-                                text = "Generating API Key. Please wait...",
+                                text = _("Generating API Key. Please wait..."),
                                 timeout = 2
                             })
                             
@@ -380,12 +390,12 @@ function KomgaMenu:promptAutoGenerate(on_success_callback)
                                     self.plugin.settings.api_key = result.key
                                     self.plugin:saveSettings()
                                     self.plugin:initAPI()
-                                    self.plugin:notify("API Key generated successfully!", "info")
+                                    self.plugin:notify(_("API Key generated successfully!"), "info")
                                     if on_success_callback then
                                         on_success_callback()
                                     end
                                 else
-                                    self.plugin:notify("Generation failed: " .. tostring(err or "Unknown error"), "error")
+                                    self.plugin:notify(T(_("Generation failed: %1"), err or "Unknown error"), "error")
                                 end
                             end)
                         end)

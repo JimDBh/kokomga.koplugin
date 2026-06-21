@@ -28,6 +28,7 @@ local KomgaAPI = require(plugin_dir .. "core/api")
 local KomgaCache = require(plugin_dir .. "core/cache")
 local KomgaSync = require(plugin_dir .. "core/sync")
 local KomgaMenu = require(plugin_dir .. "ui/menus/menu")
+local i18n = require(plugin_dir .. "core/i18n")
 
 local KomgaPlugin = WidgetContainer:extend{
     name = "kokomga",
@@ -64,6 +65,7 @@ local DEFAULT_SETTINGS = {
 function KomgaPlugin:init()
     logger.info("KomgaPlugin: Initializing...")
     self.plugin_dir = plugin_dir
+    self.i18n = i18n
     self:loadSettings()
     self:initAPI()
     
@@ -83,7 +85,7 @@ function KomgaPlugin:loadSettings()
     
     -- Safety check for LuaSettings
     if not LuaSettings then
-        self:notify("Incompatible system: LuaSettings not found.", "error")
+        self:notify(self.i18n._("Incompatible system: LuaSettings not found."), "error")
         self.settings = DEFAULT_SETTINGS
         return
     end
@@ -125,7 +127,7 @@ end
 function KomgaPlugin:registerEvents()
     Dispatcher:registerAction("komga_sync_now", {
         category = "sync",
-        title = "Manual Komga Sync",
+        title = self.i18n._("Manual Komga Sync"),
         event = "KomgaSyncNow",
         handler = function() self.sync:matchCurrentBook() end
     })
@@ -152,7 +154,7 @@ function KomgaPlugin:getDownloadDir()
     end
     
     logger.warn("KomgaPlugin: UI prompt, no directory set for download")
-    self:notify("No directory set for download! Please set a Home Directory or custom path.", "error")
+    self:notify(self.i18n._("No directory set for download! Please set a Home Directory or custom path."), "error")
     return nil
 end
 

@@ -43,7 +43,8 @@ function KomgaListItem:init()
     }
 
     local title_face = Font:getFace("smallinfofont", 20)
-    local title_text = self.entry.text or self.entry.title or "Unknown"
+    local _ = self.menu and self.menu.plugin and self.menu.plugin.i18n and self.menu.plugin.i18n._ or function(s) return s end
+    local title_text = self.entry.text or self.entry.title or _("Unknown")
     local text_width = self.width - (LIST_LAYOUT.padding_h * 2)
     
     local cover_widget

@@ -17,8 +17,10 @@ function KomgaSync:autoMatchBook(filepath, silent)
     if not self.plugin.api or not filepath then return nil end
     local filename = filepath:match("([^/\\]+)$") or filepath
     local parent_dir = filepath:match("([^/\\]+)[/\\][^/\\]+$") or ""
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
     
-    if not silent then self.plugin:notify("Searching Komga for: " .. filename, "info") end
+    if not silent then self.plugin:notify(T(_("Searching Komga for: %1"), filename), "info") end
     local matched, err = self.plugin.api:match_book(filename, parent_dir)
     
     if matched then
@@ -79,10 +81,10 @@ function KomgaSync:autoMatchBook(filepath, silent)
             end
         end)
         
-        if not silent then self.plugin:notify("Matched with: " .. matched.name, "info") end
+        if not silent then self.plugin:notify(T(_("Matched with: %1"), matched.name), "info") end
         return matched.id
     else
-        if not silent then self.plugin:notify("Failed to match: " .. tostring(err), "error") end
+        if not silent then self.plugin:notify(T(_("Failed to match: %1"), tostring(err)), "error") end
     end
     return nil
 end
@@ -133,8 +135,9 @@ end
 -- Matches the current open book manual
 function KomgaSync:matchCurrentBook()
     local doc = require("apps/reader/modules/readermenu").document
+    local _ = self.plugin.i18n._
     if not doc or not doc.file then
-        self.plugin:notify("No active book open to match.", "error")
+        self.plugin:notify(_("No active book open to match."), "error")
         return
     end
     self:autoMatchBook(doc.file, false)
@@ -149,20 +152,25 @@ function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
     if not filepath then return false end
     
     local book_id, err = self:getOrMatchBook(filepath)
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
     
     if not book_id then
-        if is_manual then self.plugin:notify("Click 'Match' first.", "error") end
+        if is_manual then self.plugin:notify(_("Click 'Match' first."), "error") end
         return false
     end
     
     local function do_pull()
-        if is_manual then self.plugin:notify("Checking server progress...", "info") end
+        if is_manual then self.plugin:notify(_("Checking server progress..."), "info") end
         
         logger.info("KomgaSync: Executing pullProgress for book", book_id)
         
         local progress, p_err = self.plugin.api:get_read_progress(book_id)
         if p_err then 
             logger.err("KomgaSync: Failed to pull progress -", tostring(p_err))
+            if is_manual then
+                self.plugin:notify(T(_("Failed to pull progress - %1"), tostring(p_err)), "error")
+            end
             return false -- FAILED to get komga progress
         end
         if type(progress) ~= "table" then
@@ -181,7 +189,7 @@ function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
         local current_page = ui.view and ui.view.state and ui.view.state.page or 1
         
         if remote_page == current_page then
-            if is_manual then self.plugin:notify("Already at server progress", "info") end
+            if is_manual then self.plugin:notify(_("Already at server progress"), "info") end
             return true
         end
         
@@ -189,13 +197,13 @@ function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
         local kosync = PluginLoader:getPluginInstance("kosync")
         
         local strategy
-        local newer_msg
+        local text
         if remote_page > current_page then
             strategy = (kosync and kosync.settings.sync_forward) or 1
-            newer_msg = "Server is ahead"
+            text = T(_("Server is ahead (Page %1). Jump?"), remote_page)
         else
             strategy = (kosync and kosync.settings.sync_backward) or 1
-            newer_msg = "Server is behind"
+            text = T(_("Server is behind (Page %1). Jump?"), remote_page)
         end
         
         if strategy == 1 then -- Prompt
@@ -203,7 +211,7 @@ function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
             local UIManager = require("ui/uimanager")
             local Event = require("ui/event")
             UIManager:show(ConfirmBox:new{
-                text = newer_msg .. " (Page " .. remote_page .. "). Jump?",
+                text = text,
                 ok_callback = function()
                     UIManager:broadcastEvent(Event:new("GotoPage", remote_page))
                 end,
@@ -212,7 +220,7 @@ function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
             local UIManager = require("ui/uimanager")
             local Event = require("ui/event")
             UIManager:broadcastEvent(Event:new("GotoPage", remote_page))
-            if is_manual then self.plugin:notify("Jumped to Page " .. remote_page, "info") end
+            if is_manual then self.plugin:notify(T(_("Jumped to Page %1"), remote_page), "info") end
         end
         
         return true
@@ -309,11 +317,14 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback)
         return
     end
     
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
+    
     local util = require("util")
     local final_dir = local_path:match("(.*)/[^/]+")
     util.makePath(final_dir .. "/")
     
-    self.plugin:notify("Downloading " .. filename .. "...", "info")
+    self.plugin:notify(T(_("Downloading %1..."), filename), "info")
     logger.info("KomgaSync: Starting download of book", book.id, "to", local_path)
     
     local tmp_path = local_path .. ".part"
@@ -323,7 +334,7 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback)
         local success, err = self.plugin.api:download_book(book.id, tmp_path)
         if success then
             logger.info("KomgaSync: Download successful for", local_path)
-            self.plugin:notify("Saved: " .. filename, "info")
+            self.plugin:notify(T(_("Saved: %1"), filename), "info")
             self.plugin.settings.matched_books_cache[local_path] = book.id
             self.plugin:saveSettings()
             
@@ -335,7 +346,7 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback)
                     custom_doc_settings:saveSetting("komga_book_id", book.id)
                     local custom_props = custom_doc_settings:readSetting("custom_props") or {}
                     local doc_props = custom_doc_settings:readSetting("doc_props") or {}
-
+ 
                     if type(book.metadata) == "table" then
                         if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
                             custom_props.title = book.metadata.title
@@ -407,7 +418,7 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback)
             end)
         else
             logger.err("KomgaSync: Download failed", tostring(err))
-            self.plugin:notify("Failed: " .. tostring(err), "error")
+            self.plugin:notify(T(_("Failed: %1"), tostring(err)), "error")
         end
     end)
 end
@@ -419,6 +430,9 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
 
     local book_id = self.plugin.settings.matched_books_cache[filepath]
     if not book_id then return end
+
+    local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
 
     -- Respect KOReader's "Always mark as finished" setting
     logger.info("KomgaSync: Checking auto mark. G_reader_settings exists:", G_reader_settings ~= nil)
@@ -452,18 +466,18 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
     if not NetworkMgr:isOnline() then
         local dialog
         dialog = ButtonDialog:new{
-            title = "No Wi-Fi connection. Cannot check for the next chapter.",
+            title = _("No Wi-Fi connection. Cannot check for the next chapter."),
             buttons = {
                 {
                     {
-                        text = "Open Next Chapter",
+                        text = _("Open Next Chapter"),
                         enabled = false,
                         callback = function() end
                     }
                 },
                 {
                     {
-                        text = "Default Action",
+                        text = _("Default Action"),
                         callback = function()
                             UIManager:close(dialog)
                             if show_native_func then
@@ -472,7 +486,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
                         end
                     },
                     {
-                        text = "Cancel",
+                        text = _("Cancel"),
                         callback = function()
                             UIManager:close(dialog)
                         end
@@ -489,7 +503,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
 
     if not next_book then
         logger.info("KomgaSync: No next chapter found.")
-        self.plugin:notify("No next chapter found.", "info")
+        self.plugin:notify(_("No next chapter found."), "info")
         return false
     end
 
@@ -505,8 +519,8 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
     
     local title = next_book.metadata and next_book.metadata.title or next_book.name or "Untitled"
     local prompt_msg = is_downloaded and 
-        ("Next chapter is ready: " .. title) or 
-        ("Next chapter is not downloaded: " .. title)
+        T(_("Next chapter is ready: %1"), title) or 
+        T(_("Next chapter is not downloaded: %1"), title)
 
     local ButtonDialog = require("ui/widget/buttondialog")
     local dialog
@@ -515,7 +529,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
         buttons = {
             {
                 {
-                    text = is_downloaded and "Open Next Chapter" or "Download & Open",
+                    text = is_downloaded and _("Open Next Chapter") or _("Download & Open"),
                     is_enter_default = true,
                     callback = function()
                         UIManager:close(dialog)
@@ -537,7 +551,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
             },
             {
                 {
-                    text = "Default Action",
+                    text = _("Default Action"),
                     callback = function()
                         UIManager:close(dialog)
                         if show_native_func then
@@ -546,7 +560,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
                     end
                 },
                 {
-                    text = "Cancel",
+                    text = _("Cancel"),
                     callback = function()
                         UIManager:close(dialog)
                     end
