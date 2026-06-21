@@ -62,6 +62,7 @@ local DEFAULT_SETTINGS = {
 
 function KomgaPlugin:init()
     logger.info("KomgaPlugin: Initializing...")
+    self.plugin_dir = plugin_dir
     self:loadSettings()
     self:initAPI()
     

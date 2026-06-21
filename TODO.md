@@ -1,9 +1,9 @@
 # Komga Plugin TODO
 
 ## Authentication & Network
-- [ ] Prompt if server url / apikey is not set
-- [ ] Auto generate API key and save in settings
-- [ ] Prompt for Wi-Fi connection for komga browser
+- [x] Prompt if server url / apikey is not set
+- [x] Auto generate API key and save in settings
+- [x] Prompt for Wi-Fi connection for komga browser
 
 ## Menu & Navigation
 - [x] Remove non-browser menu

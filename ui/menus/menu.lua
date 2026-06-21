@@ -5,6 +5,7 @@
 
 local UIManager = require("ui/uimanager")
 local InputDialog = require("ui/widget/inputdialog")
+local MultiInputDialog = require("ui/widget/multiinputdialog")
 local logger = require("logger")
 
 local KomgaMenu = {}
@@ -32,6 +33,11 @@ function KomgaMenu:createSettingsMenu()
                     text = "API Key",
                     keep_menu_open = true,
                     callback = function() self:promptInput("API Key", "api_key") end
+                },
+                {
+                    text = "Auto-Generate API Key",
+                    keep_menu_open = true,
+                    callback = function() self:promptAutoGenerate() end
                 }
             }
         end
@@ -141,9 +147,18 @@ function KomgaMenu:createSettingsMenu()
         callback = function()
             local NetworkMgr = require("ui/network/manager")
             NetworkMgr:runWhenOnline(function()
-                local KomgaBrowser = require("ui/browser")
-                local browser = KomgaBrowser:new{ plugin = self.plugin }
-                UIManager:show(browser)
+                if not self.plugin.settings.server_url or self.plugin.settings.server_url == "" or
+                   not self.plugin.settings.api_key or self.plugin.settings.api_key == "" then
+                    self:promptSetup(function()
+                        local KomgaBrowser = require("ui/browser")
+                        local browser = KomgaBrowser:new{ plugin = self.plugin }
+                        UIManager:show(browser)
+                    end)
+                else
+                    local KomgaBrowser = require("ui/browser")
+                    local browser = KomgaBrowser:new{ plugin = self.plugin }
+                    UIManager:show(browser)
+                end
             end)
         end
     })
@@ -192,6 +207,186 @@ function KomgaMenu:promptInput(title, setting_key, is_number)
     }
     UIManager:show(input)
     input:onShowKeyboard()
+end
+
+function KomgaMenu:promptSetup(on_success_callback)
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local dialog
+    dialog = ButtonDialog:new{
+        title = "Komga is not configured. Please set up connection.",
+        buttons = {
+            {
+                {
+                    text = "Manual Setup",
+                    callback = function()
+                        UIManager:close(dialog)
+                        self:promptManualSetup(on_success_callback)
+                    end
+                },
+                {
+                    text = "Auto-Generate API Key",
+                    callback = function()
+                        UIManager:close(dialog)
+                        self:promptAutoGenerate(on_success_callback)
+                    end
+                }
+            },
+            {
+                {
+                    text = "Cancel",
+                    callback = function()
+                        UIManager:close(dialog)
+                    end
+                }
+            }
+        }
+    }
+    UIManager:show(dialog)
+end
+
+function KomgaMenu:promptManualSetup(on_success_callback)
+    local dialog
+    dialog = MultiInputDialog:new{
+        title = "Manual Server Setup",
+        fields = {
+            {
+                text = self.plugin.settings.server_url or "http://",
+                hint = "Server URL",
+            },
+            {
+                text = self.plugin.settings.api_key or "",
+                hint = "API Key",
+            }
+        },
+        buttons = {
+            {
+                {
+                    text = "Cancel",
+                    id = "close",
+                    callback = function()
+                        UIManager:close(dialog)
+                    end
+                },
+                {
+                    text = "Save",
+                    is_enter_default = true,
+                    callback = function()
+                        local url, api_key = unpack(dialog:getFields())
+                        local util = require("util")
+                        url = util.trim(url)
+                        api_key = util.trim(api_key)
+                        
+                        if url == "" then
+                            self.plugin:notify("Server URL cannot be empty", "error")
+                            return
+                        end
+                        if api_key == "" then
+                            self.plugin:notify("API Key cannot be empty", "error")
+                            return
+                        end
+                        
+                        self.plugin.settings.server_url = url
+                        self.plugin.settings.api_key = api_key
+                        self.plugin:saveSettings()
+                        self.plugin:initAPI()
+                        
+                        UIManager:close(dialog)
+                        self.plugin:notify("Server connection saved", "info")
+                        if on_success_callback then
+                            on_success_callback()
+                        end
+                    end
+                }
+            }
+        }
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
+function KomgaMenu:promptAutoGenerate(on_success_callback)
+    local dialog
+    dialog = MultiInputDialog:new{
+        title = "Auto-Generate API Key",
+        fields = {
+            {
+                text = self.plugin.settings.server_url or "http://",
+                hint = "Server URL",
+            },
+            {
+                hint = "Username/Email",
+            },
+            {
+                hint = "Password",
+                text_type = "password",
+            }
+        },
+        buttons = {
+            {
+                {
+                    text = "Cancel",
+                    id = "close",
+                    callback = function()
+                        UIManager:close(dialog)
+                    end
+                },
+                {
+                    text = "Generate",
+                    is_enter_default = true,
+                    callback = function()
+                        local url, username, password = unpack(dialog:getFields())
+                        local util = require("util")
+                        url = util.trim(url)
+                        username = util.trim(username)
+                        
+                        if url == "" then
+                            self.plugin:notify("Server URL cannot be empty", "error")
+                            return
+                        end
+                        if username == "" or password == "" then
+                            self.plugin:notify("Username and Password are required", "error")
+                            return
+                        end
+                        
+                        UIManager:close(dialog)
+                        
+                        local NetworkMgr = require("ui/network/manager")
+                        NetworkMgr:runWhenOnline(function()
+                            UIManager:show(require("ui/widget/infomessage"):new{
+                                text = "Generating API Key. Please wait...",
+                                timeout = 2
+                            })
+                            
+                            UIManager:scheduleIn(0.5, function()
+                                local KomgaAPI = require(self.plugin.plugin_dir .. "core/api")
+                                local api = KomgaAPI:new(url, "")
+                                api:set_basic_auth(username, password)
+                                
+                                local Device = require("device")
+                                local key_comment = "KOReader kokomga (" .. (Device.model or "Unknown Device") .. ")"
+                                
+                                local result, err = api:generate_api_key(key_comment)
+                                if result and type(result) == "table" and result.key then
+                                    self.plugin.settings.server_url = url
+                                    self.plugin.settings.api_key = result.key
+                                    self.plugin:saveSettings()
+                                    self.plugin:initAPI()
+                                    self.plugin:notify("API Key generated successfully!", "info")
+                                    if on_success_callback then
+                                        on_success_callback()
+                                    end
+                                else
+                                    self.plugin:notify("Generation failed: " .. tostring(err or "Unknown error"), "error")
+                                end
+                            end)
+                        end)
+                    end
+                }
+            }
+        }
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
 end
 
 return KomgaMenu

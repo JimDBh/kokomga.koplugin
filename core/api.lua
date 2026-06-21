@@ -395,4 +395,20 @@ function KomgaAPI:download_book_thumbnail(book_id)
     return self:download_image("/api/v1/books/" .. escape_uri(book_id) .. "/thumbnail")
 end
 
+function KomgaAPI:set_basic_auth(username, password)
+    if username and password then
+        local creds = username .. ":" .. password
+        self.auth_header = "Basic " .. encode_base64(creds)
+    else
+        self.auth_header = nil
+    end
+end
+
+function KomgaAPI:generate_api_key(comment)
+    local payload = {
+        comment = comment or "KOReader Client"
+    }
+    return self:request("/api/v2/users/me/api-keys", "POST", payload)
+end
+
 return KomgaAPI
