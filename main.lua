@@ -158,15 +158,14 @@ end
 function KomgaPlugin:onReaderReady()
     local ui = self.ui
     
-    local ReaderStatus = require("apps/reader/modules/readerstatus")
-    if ReaderStatus and not self.orig_readerstatus_onEndOfBook then
-        self.orig_readerstatus_onEndOfBook = ReaderStatus.onEndOfBook
-        ReaderStatus.onEndOfBook = function(this_module, ...)
+    if self.ui.status and not self.ui.status.orig_onEndOfBook then
+        self.ui.status.orig_onEndOfBook = self.ui.status.onEndOfBook
+        self.ui.status.onEndOfBook = function(this_module, ...)
             if self.is_active and self.ui then
                 local args = {...}
                 local show_native = function()
-                    if self.orig_readerstatus_onEndOfBook then
-                        self.orig_readerstatus_onEndOfBook(this_module, unpack(args))
+                    if this_module.orig_onEndOfBook then
+                        this_module.orig_onEndOfBook(this_module, unpack(args))
                     end
                 end
                 
@@ -174,8 +173,8 @@ function KomgaPlugin:onReaderReady()
                     return true
                 end
             end
-            if self.orig_readerstatus_onEndOfBook then
-                return self.orig_readerstatus_onEndOfBook(this_module, ...)
+            if this_module.orig_onEndOfBook then
+                return this_module.orig_onEndOfBook(this_module, ...)
             end
         end
     end

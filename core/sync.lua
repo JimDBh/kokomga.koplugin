@@ -443,7 +443,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
     local UIManager = require("ui/uimanager")
     local Event = require("ui/event")
     
-    local title = next_book.metadata and next_book.metadata.title or next_book.name
+    local title = next_book.metadata and next_book.metadata.title or next_book.name or "Untitled"
     local prompt_msg = is_downloaded and 
         ("Next chapter is ready: " .. title) or 
         ("Next chapter is not downloaded: " .. title)
