@@ -145,21 +145,6 @@ local KomgaListMenu = Menu:extend{
 }
 
 function KomgaListMenu:_recalculateDimen()
-    -- Dynamically determine row height based on whether any item has a cover
-    local has_covers = false
-    if self.item_table then
-        for _, item in ipairs(self.item_table) do
-            if item.cover_id then
-                has_covers = true
-                break
-            end
-        end
-    end
-    
-    -- Compact height for text-only menus, tall height for cover menus
-    local list_height = (self.plugin and self.plugin.settings and self.plugin.settings.list_row_height) or 110
-    self.item_height = has_covers and list_height or 70
-
     -- Calculate available dimensions for the list
     local available_width = self.inner_dimen.w
     local available_height = self.inner_dimen.h
@@ -173,10 +158,28 @@ function KomgaListMenu:_recalculateDimen()
         available_height = available_height - self.page_info:getSize().h
     end
 
-    local rows_per_page = math.floor(available_height / self.item_height)
-    if rows_per_page < 1 then rows_per_page = 1 end
+    -- Dynamically determine row height based on whether any item has a cover
+    local has_covers = false
+    if self.item_table then
+        for _, item in ipairs(self.item_table) do
+            if item.cover_id then
+                has_covers = true
+                break
+            end
+        end
+    end
+    
+    local configured_rows = (self.plugin and self.plugin.settings and self.plugin.settings.list_rows) or 5
+    
+    if has_covers then
+        self.perpage = configured_rows
+        self.item_height = math.floor(available_height / self.perpage)
+    else
+        -- No-cover mode: Use a consistent height matching the home page (6 items) or configured_rows
+        self.perpage = math.max(6, configured_rows)
+        self.item_height = math.floor(available_height / self.perpage)
+    end
 
-    self.perpage = rows_per_page
     self.page_num = math.ceil(#self.item_table / self.perpage)
     if self.page_num > 0 and self.page > self.page_num then
         self.page = self.page_num
