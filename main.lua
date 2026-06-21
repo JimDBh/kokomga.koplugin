@@ -295,6 +295,11 @@ end
 function KomgaPlugin:onResume()
     if not self.is_active then return end
     if not self.ui.kosync then
+        local Device = require("device")
+        local NetworkMgr = require("ui/network/manager")
+        if Device:hasWifiRestore() and NetworkMgr.wifi_was_on and G_reader_settings:isTrue("auto_restore_wifi") then
+            return
+        end
         UIManager:scheduleIn(1, function()
             if self.is_active and self.ui then
                 self.sync:pullProgress(self.ui, false, true)
