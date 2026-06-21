@@ -79,6 +79,15 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    text = "Auto RTL for Komga books",
+                    checked_func = function() return self.plugin.settings.auto_rtl_direction end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.auto_rtl_direction = not self.plugin.settings.auto_rtl_direction
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
                     text = "Download into Series Subfolders",
                     checked_func = function() return self.plugin.settings.download_to_subfolder end,
                     keep_menu_open = true,

@@ -17,7 +17,7 @@
 - [x] No-cover list mode: customize row height. Try to use list height, but prioritize fitting everything on one page.
 
 ## Reading & Sync Behavior
-- [ ] Auto-set reading direction to "Right to Left" when opening a file
+- [x] Auto-set reading direction to "Right to Left" when opening a file
 - [x] Inhibit regular KOReader progress sync for Komga books
 - [ ] Add functionality to match existing side-loaded files to Komga IDs
 

@@ -57,7 +57,8 @@ local DEFAULT_SETTINGS = {
     matched_books_cache = {},
     download_dir = "",
     download_to_subfolder = true,
-    sync_interval_pages = 5
+    sync_interval_pages = 5,
+    auto_rtl_direction = false
 }
 
 function KomgaPlugin:init()
@@ -184,6 +185,19 @@ function KomgaPlugin:onReaderReady()
     logger.info("KomgaPlugin: onReaderReady triggered for", tostring(filepath))
     self.is_active = true
     self.last_synced_page = ui and ui.view and ui.view.state and ui.view.state.page or 1
+    
+    if self.settings.auto_rtl_direction then
+        local book_id = self.sync:getOrMatchBook(filepath)
+        if book_id then
+            if ui.view and not ui.view.inverse_reading_order then
+                ui.view:onToggleReadingOrder(true)
+                if ui.doc_settings then
+                    ui.doc_settings:saveSetting("inverse_reading_order", true)
+                end
+                logger.info("KomgaPlugin: Automatically switched reading order to RTL")
+            end
+        end
+    end
     
     if self.ui.kosync and not self.orig_kosync_getProgress then
         self.orig_kosync_getProgress = self.ui.kosync.getProgress
