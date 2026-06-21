@@ -232,6 +232,7 @@ end
 function KomgaPlugin:addToMainMenu(menu_items)
     menu_items.komga_plugin = {
         text = "kokomga",
+        sorting_hint = "search",
         search = true,
         keep_menu_open = true,
         sub_item_table_func = function() return self.menu:createSettingsMenu() end

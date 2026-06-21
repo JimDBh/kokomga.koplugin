@@ -6,7 +6,7 @@
 
 ## Menu & Navigation
 - [ ] Remove non-browser menu
-- [ ] Move menu to the search menu
+- [x] Move menu to the search menu
 - [ ] Increase the size of the hamburger icon
 
 ## Browser & UI Features
