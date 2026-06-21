@@ -260,12 +260,19 @@ function KomgaAPI:get_series(library_id)
     return self:request("/api/v1/series?library_id=" .. encoded_id .. "&size=100")
 end
 
--- Get books inside a series
 function KomgaAPI:get_books_for_series(series_id, filters)
     local encoded_id = escape_uri(series_id)
     local query = "?size=100"
     if filters then
-        if filters.read_status then query = query .. "&read_status=" .. escape_uri(filters.read_status) end
+        if filters.read_status then
+            if type(filters.read_status) == "table" then
+                for _, status in ipairs(filters.read_status) do
+                    query = query .. "&read_status=" .. escape_uri(status)
+                end
+            else
+                query = query .. "&read_status=" .. escape_uri(filters.read_status)
+            end
+        end
         if filters.sort then query = query .. "&sort=" .. escape_uri(filters.sort) end
     end
     return self:request("/api/v1/series/" .. encoded_id .. "/books" .. query)
@@ -276,7 +283,15 @@ end
 function KomgaAPI:get_books(filters)
     local query = "?size=100"
     if filters then
-        if filters.read_status then query = query .. "&read_status=" .. escape_uri(filters.read_status) end
+        if filters.read_status then
+            if type(filters.read_status) == "table" then
+                for _, status in ipairs(filters.read_status) do
+                    query = query .. "&read_status=" .. escape_uri(status)
+                end
+            else
+                query = query .. "&read_status=" .. escape_uri(filters.read_status)
+            end
+        end
         if filters.sort then query = query .. "&sort=" .. escape_uri(filters.sort) end
     end
     return self:request("/api/v1/books" .. query)

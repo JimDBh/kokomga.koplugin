@@ -12,7 +12,7 @@
 ## Browser & UI Features
 - [ ] Bulk download directly in the browser
 - [ ] Sort/Select what content to include in the browser
-- [ ] Filter options should be checkboxes (e.g., allow selecting both 'unread' + 'in progress')
+- [x] Filter options should be checkboxes (e.g., allow selecting both 'unread' + 'in progress')
 - [x] No-cover list mode: customize row height. Try to use list height, but prioritize fitting everything on one page.
 
 ## Reading & Sync Behavior

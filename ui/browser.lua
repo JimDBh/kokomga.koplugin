@@ -446,7 +446,17 @@ function KomgaBrowser:showBooksInSeries(series_id, series_title, read_status)
             ["IN_PROGRESS"] = "In Progress",
             ["READ"] = "Completed"
         }
-        display_title = series_title .. " (" .. (status_map[read_status] or read_status) .. ")"
+        local status_str = ""
+        if type(read_status) == "table" then
+            if #read_status > 0 and #read_status < 3 then
+                local mapped = {}
+                for _, s in ipairs(read_status) do table.insert(mapped, status_map[s] or s) end
+                status_str = " (" .. table.concat(mapped, ", ") .. ")"
+            end
+        else
+            status_str = " (" .. (status_map[read_status] or read_status) .. ")"
+        end
+        display_title = series_title .. status_str
     end
     
     self:pushCatalog(display_title, item_table, { is_series = true, series_id = series_id, read_status = read_status, original_title = series_title })
@@ -455,31 +465,59 @@ end
 function KomgaBrowser:showFilterDialog(series_id, series_title, current_status)
     local ButtonDialog = require("ui/widget/buttondialog")
     local dialog
-    local function filter_action(status)
+    
+    local selected = {}
+    if current_status and type(current_status) == "table" then
+        -- Check if it's an array (from opts) or a map (from toggle_action)
+        if current_status[1] then
+            for _, v in ipairs(current_status) do
+                selected[v] = true
+            end
+        else
+            -- It's a map or empty array, copy the state correctly
+            for k, v in pairs(current_status) do
+                selected[k] = v
+            end
+        end
+    elseif current_status and type(current_status) == "string" then
+        selected[current_status] = true
+    else
+        selected = {
+            UNREAD = true,
+            IN_PROGRESS = true,
+            READ = true
+        }
+    end
+
+    local function toggle_action(id)
         return function()
-            UIManager:close(dialog)
-            self:onReturn() -- Pop the current series view
-            self:showBooksInSeries(series_id, series_title, status)
+            selected[id] = not selected[id]
         end
     end
     
-    local status_map = {
-        ["UNREAD"] = "Unread",
-        ["IN_PROGRESS"] = "In Progress",
-        ["READ"] = "Completed"
-    }
-    local current = current_status and status_map[current_status] or "All"
+    local function apply_action()
+        return function()
+            UIManager:close(dialog)
+            local status_list = {}
+            for k, v in pairs(selected) do
+                if v then table.insert(status_list, k) end
+            end
+            self:onReturn() -- Pop the current series view
+            self:showBooksInSeries(series_id, series_title, status_list)
+        end
+    end
     
     dialog = ButtonDialog:new{
-        title = "Filter: " .. series_title .. "\n(Currently Selected: " .. current .. ")",
+        title = "Filter: " .. series_title,
         buttons = {
             {
-                { text = (current == "All" and ">>> All <<<" or "All"), callback = filter_action(nil) },
-                { text = (current == "Unread" and ">>> Unread <<<" or "Unread"), callback = filter_action("UNREAD") }
+                { text = "Unread", checked_func = function() return selected["UNREAD"] end, callback = toggle_action("UNREAD") },
+                { text = "In Progress", checked_func = function() return selected["IN_PROGRESS"] end, callback = toggle_action("IN_PROGRESS") },
+                { text = "Completed", checked_func = function() return selected["READ"] end, callback = toggle_action("READ") }
             },
             {
-                { text = (current == "In Progress" and ">>> In Progress <<<" or "In Progress"), callback = filter_action("IN_PROGRESS") },
-                { text = (current == "Completed" and ">>> Completed <<<" or "Completed"), callback = filter_action("READ") }
+                { text = "Apply Filter", callback = apply_action() },
+                { text = "Cancel", callback = function() UIManager:close(dialog) end }
             }
         }
     }
