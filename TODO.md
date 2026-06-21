@@ -1,13 +1,26 @@
 # Komga Plugin TODO
 
-## Features
-- [x] show cover / thumbnail in list and grid. Implemented caching to avoid excessive fetching via network
-- [ ] auto go to next chapter when finishing last page
-- [ ] auto fetch next X chapter in the background or after reading a chapter?
-- [ ] auto generate API key and save in settings
-- [x] add user settings option to configure list row height, grid columns, and grid rows
-- [ ] progress sync - bypass / disable original progress sync if we got komga progress successfully - maybe not needed
+## Authentication & Network
+- [ ] Auto generate API key and save in settings
+- [ ] Prompt for Wi-Fi connection when using network
 
-## Testing / Verification
-- [ ] test without network behavior
-- [ ] test non-manga book behavior
+## Menu & Navigation
+- [ ] Remove non-browser menu
+- [ ] Move menu to the search menu
+- [ ] Increase the size of the hamburger icon
+
+## Browser & UI Features
+- [ ] Bulk download directly in the browser
+- [ ] Sort/Select what content to include in the browser
+- [ ] Filter options should be checkboxes (e.g., allow selecting both 'unread' + 'in progress')
+- [ ] No-cover list mode: customize row height. Try to use list height, but prioritize fitting everything on one page.
+
+## Reading & Sync Behavior
+- [ ] Auto-set reading direction to "Right to Left" when opening a file
+- [ ] Inhibit regular KOReader progress sync for Komga books:
+  - On open document: if it has a Komga ID, turn off regular auto-progress sync. Otherwise, respect the user's default setting.
+- [ ] Add functionality to match existing side-loaded files to Komga IDs
+
+## Plugin Infrastructure
+- [ ] Create `_meta.lua` file for plugin metadata
+- [ ] Implement i18n (Internationalization) support
