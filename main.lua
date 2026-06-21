@@ -189,34 +189,24 @@ function KomgaPlugin:onReaderReady()
         
         self.ui.kosync.getProgress = function(kosync_instance, ensure_networking, interactive)
             logger.info("KomgaPlugin: Intercepted KOSync:getProgress (ensure_networking=" .. tostring(ensure_networking) .. ")")
-            local function do_sync()
-                logger.info("KomgaPlugin: Executing do_sync inside getProgress interceptor")
-                local current_filepath = self.ui.document and self.ui.document.file
-                if current_filepath then
-                    local book_id = self.sync:getOrMatchBook(current_filepath)
-                    if book_id then
-                        local success = self.sync:pullProgress(self.ui, interactive, false)
-                        if success then
-                            logger.info("KomgaPlugin: Intercepted KOSync and used Komga sync")
-                            return -- Komga handled it (or found 0 progress), inhibit KOSync
-                        end
-                    end
-                end
-                
-                -- Fallback to KOSync natively
-                logger.info("KomgaPlugin: Falling back to native KOSync")
-                return self.orig_kosync_getProgress(kosync_instance, false, interactive)
-            end
-
-            if ensure_networking then
-                local NetworkMgr = require("ui/network/manager")
-                if NetworkMgr:willRerunWhenOnline(do_sync) then
-                    logger.info("KomgaPlugin: Network offline, getProgress queued for when online.")
+            
+            local current_filepath = self.ui.document and self.ui.document.file
+            local book_id = current_filepath and self.sync:getOrMatchBook(current_filepath)
+            
+            local NetworkMgr = require("ui/network/manager")
+            if NetworkMgr:isOnline() and book_id then
+                local success = self.sync:pullProgress(self.ui, interactive, false)
+                if success then
+                    logger.info("KomgaPlugin: Intercepted KOSync and pulled progress from Komga")
                     return
                 end
             end
             
-            return do_sync()
+            -- Fallback to native KOSync when offline, not matched, or pull failed.
+            -- This allows native KOSync to handle queueing and prompting, and once online,
+            -- it will trigger getProgress again, which we will intercept while online.
+            logger.info("KomgaPlugin: Falling back to native KOSync:getProgress")
+            return self.orig_kosync_getProgress(kosync_instance, ensure_networking, interactive)
         end
     end
 
@@ -229,8 +219,9 @@ function KomgaPlugin:onReaderReady()
             if current_filepath then
                 local book_id = self.sync:getOrMatchBook(current_filepath)
                 if book_id then
-                    -- This is a Komga book, so we push progress to Komga instead of KOReader's sync server
-                    self.sync:pushProgressForDocument(self.ui, not interactive, ensure_networking)
+                    -- Pass ensure_networking = false to avoid duplicate willRerunWhenOnline prompts/queues.
+                    -- The chained native KOSync will trigger prompts if needed and rerun when online, re-triggering us.
+                    self.sync:pushProgressForDocument(self.ui, not interactive, false)
                 end
             end
             
@@ -286,9 +277,9 @@ function KomgaPlugin:onCloseDocument()
     local filepath = ui and ui.document and ui.document.file
     if filepath then
         local NetworkMgr = require("ui/network/manager")
-        NetworkMgr:goOnlineToRun(function()
+        if NetworkMgr:isOnline() then
             self.sync:pushProgressForDocument(ui, true, false)
-        end)
+        end
     end
 end
 
@@ -300,11 +291,13 @@ function KomgaPlugin:onResume()
         if Device:hasWifiRestore() and NetworkMgr.wifi_was_on and G_reader_settings:isTrue("auto_restore_wifi") then
             return
         end
-        UIManager:scheduleIn(1, function()
-            if self.is_active and self.ui then
-                self.sync:pullProgress(self.ui, false, true)
-            end
-        end)
+        if NetworkMgr:isOnline() then
+            UIManager:scheduleIn(1, function()
+                if self.is_active and self.ui then
+                    self.sync:pullProgress(self.ui, false, false)
+                end
+            end)
+        end
     end
 end
 
@@ -313,7 +306,10 @@ function KomgaPlugin:onSuspend()
     if not self.ui.kosync then
         local ui = self.ui
         if ui and ui.document and ui.document.file then
-            self.sync:pushProgressForDocument(ui, true, true)
+            local NetworkMgr = require("ui/network/manager")
+            if NetworkMgr:isOnline() then
+                self.sync:pushProgressForDocument(ui, true, false)
+            end
         end
     end
 end

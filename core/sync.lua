@@ -218,10 +218,15 @@ function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
         return true
     end
 
-    if ensure_networking ~= false then
-        local NetworkMgr = require("ui/network/manager")
-        if NetworkMgr:willRerunWhenOnline(do_pull) then
-            logger.info("KomgaSync: Network offline, pullProgress queued for when online.")
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isOnline() then
+        if is_manual then
+            if NetworkMgr:willRerunWhenOnline(do_pull) then
+                logger.info("KomgaSync: Network offline, manual pullProgress queued for when online.")
+                return false
+            end
+        else
+            logger.info("KomgaSync: Network offline, silently skipping background pullProgress.")
             return false
         end
     end
@@ -257,12 +262,10 @@ function KomgaSync:pushProgressForDocument(ui, is_quiet, ensure_networking)
         self:pushProgress(book_id, current_page, total_pages, is_quiet)
     end
     
-    if ensure_networking ~= false then
-        local NetworkMgr = require("ui/network/manager")
-        if NetworkMgr:willRerunWhenOnline(do_push) then
-            logger.info("KomgaSync: Network offline, pushProgress queued for when online.")
-            return
-        end
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isOnline() then
+        logger.info("KomgaSync: Network offline, silently skipping pushProgressForDocument.")
+        return
     end
     
     do_push()
