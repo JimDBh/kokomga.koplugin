@@ -160,6 +160,28 @@ end
 -- Lifecycle hooks
 function KomgaPlugin:onReaderReady()
     local ui = self.ui
+    
+    local ReaderStatus = require("apps/reader/modules/readerstatus")
+    if ReaderStatus and not self.orig_readerstatus_onEndOfBook then
+        self.orig_readerstatus_onEndOfBook = ReaderStatus.onEndOfBook
+        ReaderStatus.onEndOfBook = function(this_module, ...)
+            if self.is_active and self.ui then
+                local args = {...}
+                local show_native = function()
+                    if self.orig_readerstatus_onEndOfBook then
+                        self.orig_readerstatus_onEndOfBook(this_module, unpack(args))
+                    end
+                end
+                
+                if self.sync:promptNextChapter(self.ui, show_native) then
+                    return true
+                end
+            end
+            if self.orig_readerstatus_onEndOfBook then
+                return self.orig_readerstatus_onEndOfBook(this_module, ...)
+            end
+        end
+    end
     local document = ui and ui.document
     local filepath = document and document.file
     logger.info("KomgaPlugin: onReaderReady triggered for", tostring(filepath))
@@ -191,14 +213,8 @@ function KomgaPlugin:onPageUpdate(page)
 end
 
 function KomgaPlugin:onEndOfBook()
-    logger.info("KomgaPlugin: onEndOfBook triggered")
-    if not self.is_active then return end
-    local ui = self.ui
-    if ui then
-        if self.sync:promptNextChapter(ui) then
-            return true
-        end
-    end
+    -- This is now handled by our monkey-patch in onReaderReady, 
+    -- so we don't need to do anything here anymore.
 end
 
 function KomgaPlugin:onCloseDocument()

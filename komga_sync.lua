@@ -361,13 +361,38 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback)
     end)
 end
 
-function KomgaSync:promptNextChapter(ui)
+function KomgaSync:promptNextChapter(ui, show_native_func)
     if not self.plugin.api or not ui or not ui.document then return end
     local filepath = ui.document.file
     if not filepath then return end
 
     local book_id = self.plugin.settings.matched_books_cache[filepath]
     if not book_id then return end
+
+    -- Respect KOReader's "Always mark as finished" setting
+    logger.info("KomgaSync: Checking auto mark. G_reader_settings exists:", G_reader_settings ~= nil)
+    if G_reader_settings then
+        local is_auto = G_reader_settings:isTrue("end_document_auto_mark")
+        logger.info("KomgaSync: end_document_auto_mark value:", is_auto)
+        if is_auto then
+            if ui.doc_settings then
+                local summary = ui.doc_settings:readSetting("summary")
+                if type(summary) == "table" then
+                    summary.status = "complete"
+                    summary.modified = os.date("%Y-%m-%d", os.time())
+                    ui.doc_settings:saveSetting("summary", summary)
+                    logger.info("KomgaSync: Marked summary.status as complete.")
+                end
+            end
+            pcall(function()
+                local BookList = require("ui/widget/booklist")
+                BookList.setBookInfoCacheProperty(filepath, "status", "complete")
+                logger.info("KomgaSync: Updated BookList cache.")
+            end)
+            -- Also push the 100% progress up to the Komga server
+            self:pushProgressForDocument(ui, true)
+        end
+    end
 
     -- Fetch the book to get series_id
     local book_meta, err = self.plugin.api:request("/api/v1/books/" .. book_id)
@@ -392,49 +417,70 @@ function KomgaSync:promptNextChapter(ui)
     if not next_book then
         logger.info("KomgaSync: No next chapter found.")
         self.plugin:notify("No next chapter found.", "info")
-        return
+        return false
     end
 
     local local_path, filename = self:getBookLocalPath(next_book, series_title)
-    if not local_path then return end
+    if not local_path then return false end
 
     local lfs = require("libs/libkoreader-lfs")
     local is_downloaded = (lfs.attributes(local_path, "mode") == "file")
 
-    local ConfirmBox = require("ui/widget/confirmbox")
     local UIManager = require("ui/uimanager")
     local Event = require("ui/event")
     
-    -- Dismiss KOReader's native end_document dialog if it is already open
-    local top_widget = UIManager:getTopWidget()
-    if top_widget and top_widget.id == "end_document" then
-        UIManager:close(top_widget)
-    end
-    
     local title = next_book.metadata and next_book.metadata.title or next_book.name
     local prompt_msg = is_downloaded and 
-        ("Open next chapter: " .. title .. "?") or 
-        ("Download & open next chapter: " .. title .. "?")
+        ("Next chapter is ready: " .. title) or 
+        ("Next chapter is not downloaded: " .. title)
 
-    UIManager:show(ConfirmBox:new{
-        text = prompt_msg,
-        ok_callback = function()
-            local function open_doc(path)
-                logger.info("KomgaSync: Opening next chapter:", path)
-                UIManager:broadcastEvent(Event:new("CloseDocument"))
-                UIManager:scheduleIn(0.5, function()
-                    local ReaderUI = require("apps/reader/readerui")
-                    ReaderUI:showReader(path)
-                end)
-            end
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local dialog
+    dialog = ButtonDialog:new{
+        title = prompt_msg,
+        buttons = {
+            {
+                {
+                    text = is_downloaded and "Open Next Chapter" or "Download & Open",
+                    is_enter_default = true,
+                    callback = function()
+                        UIManager:close(dialog)
+                        local function open_doc(path)
+                            logger.info("KomgaSync: Opening next chapter:", path)
+                            UIManager:nextTick(function()
+                                local filemanagerutil = require("apps/filemanager/filemanagerutil")
+                                filemanagerutil.openFile(ui, path)
+                            end)
+                        end
 
-            if is_downloaded then
-                open_doc(local_path)
-            else
-                self:downloadBook(next_book, series_title, open_doc)
-            end
-        end,
-    })
+                        if is_downloaded then
+                            open_doc(local_path)
+                        else
+                            self:downloadBook(next_book, series_title, open_doc)
+                        end
+                    end
+                }
+            },
+            {
+                {
+                    text = "Default Action",
+                    callback = function()
+                        UIManager:close(dialog)
+                        if show_native_func then
+                            show_native_func()
+                        end
+                    end
+                },
+                {
+                    text = "Cancel",
+                    callback = function()
+                        UIManager:close(dialog)
+                    end
+                }
+            }
+        }
+    }
+    UIManager:show(dialog)
     
     return true
 end
