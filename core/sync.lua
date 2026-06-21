@@ -424,25 +424,8 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
         end
     end
 
-    -- Fetch the book to get series_id
-    local book_meta, err = self.plugin.api:request("/api/v1/books/" .. book_id)
-    if not book_meta or not book_meta.seriesId then return end
-
-    -- Fetch series to get books and series title
-    local series_meta = self.plugin.api:request("/api/v1/series/" .. book_meta.seriesId)
-    local series_title = series_meta and series_meta.metadata and series_meta.metadata.title or book_meta.seriesTitle
-    
-    -- Fetch all books in series sorted
-    local books_res = self.plugin.api:get_books_for_series(book_meta.seriesId, { sort = "metadata.numberSort,asc", size = 500 })
-    if not books_res or not books_res.content then return end
-
-    local next_book = nil
-    for i, b in ipairs(books_res.content) do
-        if b.id == book_id and i < #books_res.content then
-            next_book = books_res.content[i+1]
-            break
-        end
-    end
+    -- Get the next book directly using Komga's native endpoint (404 → nil = no next book)
+    local next_book = self.plugin.api:get_next_book(book_id)
 
     if not next_book then
         logger.info("KomgaSync: No next chapter found.")
@@ -450,6 +433,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
         return false
     end
 
+    local series_title = next_book.seriesTitle
     local local_path, filename = self:getBookLocalPath(next_book, series_title)
     if not local_path then return false end
 

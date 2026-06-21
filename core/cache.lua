@@ -60,18 +60,13 @@ function KomgaCache:write_file(filepath, content)
     return false
 end
 
--- Ensures offline metadata tables are nested and structured safely
+-- Ensures cover-art cache table exists
 function KomgaCache:ensureStructure()
     if not self.plugin.settings.library_metadata_cache then
         self.plugin.settings.library_metadata_cache = {}
     end
     local cache = self.plugin.settings.library_metadata_cache
-    if not cache.series then cache.series = {} end
-    if not cache.series_time then cache.series_time = {} end
-    if not cache.books then cache.books = {} end
-    if not cache.books_time then cache.books_time = {} end
     if not cache.covers then cache.covers = {} end
-    cache.libraries_time = cache.libraries_time or 0
 end
 
 function KomgaCache:clear()
@@ -79,114 +74,6 @@ function KomgaCache:clear()
     self:ensureStructure()
     self.plugin:saveSettings()
     logger.info("[Komga Cache] Cleared metadata cache")
-end
-
--- Retrieves libraries list, querying either cache or remote api depending on conditions
-function KomgaCache:getLibraries()
-    self:ensureStructure()
-    local cache = self.plugin.settings.library_metadata_cache
-    
-    local use_cache = false
-    if self.plugin.settings.cache_expiry_policy ~= "always_refresh" and cache.libraries then
-        if self.plugin.settings.cache_expiry_policy == "manual" then
-            use_cache = true
-        elseif self.plugin.settings.cache_expiry_policy == "smart" then
-            local age = os.time() - (cache.libraries_time or 0)
-            if age < (self.plugin.settings.cache_expiry_mins or 60) * 60 then
-                use_cache = true
-            end
-        end
-    end
-    
-    if use_cache then
-        logger.info("[Komga Cache] Sourced libraries from local cache")
-        return cache.libraries
-    end
-    
-    logger.info("[Komga Cache] Sourced libraries from remote API")
-    local libs, err = self.plugin.api:get_libraries()
-    if libs then
-        cache.libraries = sanitize_for_settings(libs)
-        cache.libraries_time = os.time()
-        self.plugin:saveSettings()
-    end
-    return libs, err
-end
-
--- Retrieves series list by library ID, supporting policy-based caching
-function KomgaCache:getSeries(library_id)
-    self:ensureStructure()
-    local cache = self.plugin.settings.library_metadata_cache
-    
-    local use_cache = false
-    if self.plugin.settings.cache_expiry_policy ~= "always_refresh" and cache.series[library_id] then
-        if self.plugin.settings.cache_expiry_policy == "manual" then
-            use_cache = true
-        elseif self.plugin.settings.cache_expiry_policy == "smart" then
-            local age = os.time() - (cache.series_time[library_id] or 0)
-            if age < (self.plugin.settings.cache_expiry_mins or 60) * 60 then
-                use_cache = true
-            end
-        end
-    end
-    
-    if use_cache then
-        logger.info("[Komga Cache] Sourced series from local cache for library: " .. library_id)
-        return cache.series[library_id]
-    end
-    
-    logger.info("[Komga Cache] Sourced series from remote API for library: " .. library_id)
-    local series_page, err = self.plugin.api:get_series(library_id)
-    if series_page then
-        cache.series[library_id] = sanitize_for_settings(series_page)
-        cache.series_time[library_id] = os.time()
-        
-        -- Download/precache thumbnails if option is selected
-        if self.plugin.settings.cache_covers and series_page.content then
-            self:prefetchCovers(series_page.content, "series")
-        end
-        
-        self.plugin:saveSettings()
-    end
-    return series_page, err
-end
-
--- Retrieves books list inside a series, returning from disk cache where policy allows
-function KomgaCache:getBooks(series_id)
-    self:ensureStructure()
-    local cache = self.plugin.settings.library_metadata_cache
-    
-    local use_cache = false
-    if self.plugin.settings.cache_expiry_policy ~= "always_refresh" and cache.books[series_id] then
-        if self.plugin.settings.cache_expiry_policy == "manual" then
-            use_cache = true
-        elseif self.plugin.settings.cache_expiry_policy == "smart" then
-            local age = os.time() - (cache.books_time[series_id] or 0)
-            if age < (self.plugin.settings.cache_expiry_mins or 60) * 60 then
-                use_cache = true
-            end
-        end
-    end
-    
-    if use_cache then
-        logger.info("[Komga Cache] Sourced books from local cache for series: " .. series_id)
-        return cache.books[series_id]
-    end
-    
-    logger.info("[Komga Cache] Sourced books from remote API for series: " .. series_id)
-    local books_page, err = self.plugin.api:get_books_for_series(series_id)
-    if books_page then
-        cache.books[series_id] = sanitize_for_settings(books_page)
-        cache.books_time[series_id] = os.time()
-        
-        -- Download/precache thumbnails if option is selected
-        if self.plugin.settings.cache_covers and books_page.content then
-            self:prefetchCovers(books_page.content, "book")
-        end
-        
-        self.plugin:saveSettings()
-    end
-    return books_page, err
 end
 
 -- Downloads and maintains dynamic offline cover art inside downloads directory

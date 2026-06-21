@@ -2,6 +2,13 @@ local Menu = require("ui/widget/menu")
 local KomgaListMenu = require("ui/menus/list_menu")
 local KomgaGridMenu = require("ui/menus/grid_menu")
 local UIManager = require("ui/uimanager")
+local logger = require("logger")
+
+-- Capture base class methods once so setViewMode wrapping never double-wraps
+local _base_list_recalc = KomgaListMenu._recalculateDimen
+local _base_list_update = KomgaListMenu.updateItems
+local _base_grid_recalc = KomgaGridMenu._recalculateDimen
+local _base_grid_update = KomgaGridMenu.updateItems
 
 local function hideWidget(w)
     if not w then return end
@@ -162,10 +169,12 @@ local KomgaBrowser = KomgaListMenu:extend{
     title_bar_fm_style = true,
     plugin = nil,
     paths = nil,
+    _pagination = nil,  -- { loader, server_page, total_pages, page_size }
 }
 
 function KomgaBrowser:init()
     self.paths = {}
+    self._pagination = nil
     self.catalog_title = "Komga"
     self.title = "Komga"
     self.item_table = self:getHomeItemTable()
@@ -184,15 +193,37 @@ function KomgaBrowser:init()
     self:autoSetViewMode(self.item_table)
 end
 
+-- ---------------------------------------------------------------------------
+-- Page-size helper
+-- ---------------------------------------------------------------------------
+
+-- Returns the number of items to request per server page based on current settings.
+-- has_covers: whether the catalog entries are expected to have cover art.
+function KomgaBrowser:getPageSize(has_covers)
+    local mode = self.plugin.settings.view_mode or "list"
+    if not has_covers then
+        return math.max(6, self.plugin.settings.list_rows or 5)
+    end
+    if mode == "grid" then
+        local cols = self.plugin.settings.grid_columns or 3
+        local rows = self.plugin.settings.grid_rows or 3
+        return cols * rows
+    else
+        return self.plugin.settings.list_rows or 5
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- View mode + pagination-aware rendering
+-- ---------------------------------------------------------------------------
+
 function KomgaBrowser:autoSetViewMode(item_table)
     local has_covers = false
     if item_table and #item_table > 0 then
-        -- Fast check first item
         local first = item_table[1]
         if first.cover_id or first.cover_type then
             has_covers = true
         else
-            -- Check at least a few items in case the first is a text-only header
             for i = 1, math.min(#item_table, 5) do
                 if item_table[i].cover_id or item_table[i].cover_type then
                     has_covers = true
@@ -218,13 +249,28 @@ function KomgaBrowser:setViewMode(mode, save_preference)
     end
     
     if mode == "grid" then
-        self._recalculateDimen = KomgaGridMenu._recalculateDimen
-        self.updateItems = KomgaGridMenu.updateItems
+        -- Wrap grid base methods so:
+        --   _recalculateDimen overrides page_num with server total when paginating
+        --   updateItems fetches more server data before rendering if needed
+        self._recalculateDimen = function(s)
+            _base_grid_recalc(s)
+            if s._pagination then s.page_num = s._pagination.total_pages end
+        end
+        self.updateItems = function(s, select_number)
+            s:_maybeLoadMore()
+            _base_grid_update(s, select_number)
+        end
         self.columns = self.plugin.settings.grid_columns or KomgaGridMenu.columns
         self.grid_rows = self.plugin.settings.grid_rows or 3
     else
-        self._recalculateDimen = KomgaListMenu._recalculateDimen
-        self.updateItems = KomgaListMenu.updateItems
+        self._recalculateDimen = function(s)
+            _base_list_recalc(s)
+            if s._pagination then s.page_num = s._pagination.total_pages end
+        end
+        self.updateItems = function(s, select_number)
+            s:_maybeLoadMore()
+            _base_list_update(s, select_number)
+        end
         self.columns = nil
         self.grid_rows = nil
         local Screen = require("device").screen
@@ -232,21 +278,81 @@ function KomgaBrowser:setViewMode(mode, save_preference)
         self.item_height = math.floor(Screen:getHeight() / rows)
     end
     
+    -- Recalibrate pagination when the mode switch changes page_size.
+    -- Re-fetch page 0 from the server with the new size so future fetches
+    -- use the correct page boundaries, and recalculate total_pages.
+    -- Item_table is replaced in-place to preserve the reference in paths stack.
+    if self._pagination then
+        local p = self._pagination
+        local new_page_size = self:getPageSize(p.has_covers)
+        if new_page_size ~= p.page_size then
+            logger.info("KomgaBrowser: page_size changed", p.page_size, "->", new_page_size, "; refetching page 0")
+            local total_elements = p.total_elements or (p.total_pages * p.page_size)
+            p.page_size = new_page_size
+            p.total_pages = math.max(1, math.ceil(total_elements / new_page_size))
+            p.server_page = 0
+            -- Fetch page 0 with the new size and rebuild item_table in-place
+            local new_items = p.loader(0, new_page_size) or {}
+            for i = #self.item_table, 1, -1 do self.item_table[i] = nil end
+            for _, item in ipairs(new_items) do table.insert(self.item_table, item) end
+            if #self.item_table == 0 then
+                table.insert(self.item_table, { text = "Nothing found" })
+                p.total_pages = 1
+            end
+        end
+    end
+
+    -- Always start at page 1 when switching modes to avoid position
+    -- mismatches (grid and list have different items-per-page counts)
+    self.page = 1
     if self.item_table then
         self:updateItems()
     end
 end
+
+-- Fetch the next server page and append its items to item_table if the user
+-- has paged into territory we haven't loaded yet.
+--
+-- IMPORTANT: We use p.page_size (not self.perpage) because in grid mode,
+-- self.perpage = row count only (e.g. 3), while actual items per display page
+-- = rows * cols (e.g. 9). p.page_size is always the true items-per-page for
+-- both list and grid modes, since getPageSize() was designed to match exactly.
+function KomgaBrowser:_maybeLoadMore()
+    local p = self._pagination
+    if not p or not p.loader then return end
+    if p.server_page + 1 >= p.total_pages then return end  -- already have everything
+
+    local needed_up_to = self.page * p.page_size
+
+    if needed_up_to > #self.item_table then
+        logger.info("KomgaBrowser: fetching server page", p.server_page + 1, "of", p.total_pages)
+        p.server_page = p.server_page + 1
+        local new_items = p.loader(p.server_page, p.page_size)
+        if new_items and #new_items > 0 then
+            for _, item in ipairs(new_items) do
+                table.insert(self.item_table, item)
+            end
+        end
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Navigation stack
+-- ---------------------------------------------------------------------------
 
 function KomgaBrowser:onReturn()
     table.remove(self.paths)
     local path = self.paths[#self.paths]
     if path then
         self.catalog_title = path.title
+        -- Restore pagination state BEFORE switchItemTable triggers updateItems
+        self._pagination = nil
         self:autoSetViewMode(path.item_table)
+        self._pagination = path.opts and path.opts._pagination or nil
         self:switchItemTable(path.title, path.item_table)
         toggleTitleButtons(self, path.opts)
     else
-        self:init() -- Reset internal state
+        self:init()
         self:switchItemTable(self.catalog_title, self.item_table)
         toggleTitleButtons(self, nil)
     end
@@ -269,176 +375,246 @@ function KomgaBrowser:pushCatalog(title, item_table, opts)
     })
     self.catalog_title = title
     
+    -- Clear pagination so autoSetViewMode's updateItems doesn't try to load more
+    -- with the previous catalog's pagination state
+    self._pagination = nil
     self:autoSetViewMode(item_table)
+    -- Now set the real pagination before switchItemTable triggers the proper updateItems
+    self._pagination = opts._pagination or nil
     
     self:switchItemTable(title, item_table)
     
     toggleTitleButtons(self, opts)
 end
 
+-- ---------------------------------------------------------------------------
+-- Generic paginated catalog loader
+-- ---------------------------------------------------------------------------
+
+-- Fetches the first server page, builds item_table, wires up a lazy loader for
+-- subsequent pages, and calls pushCatalog.
+--
+-- args = {
+--   title        : string
+--   fetch_func   : function(page, size) -> Komga paginated response (or plain array)
+--   item_builder : function(entry) -> item table or nil
+--   cover_type   : "series" | "book" | nil  (nil = no covers)
+--   empty_text   : string  (shown when 0 items)
+--   push_opts    : table   (merged with _pagination before pushCatalog)
+-- }
+function KomgaBrowser:_loadCatalog(args)
+    local page_size = self:getPageSize(args.cover_type ~= nil)
+    local response = args.fetch_func(0, page_size)
+
+    -- Komga paginates with response.content / response.totalPages.
+    -- get_libraries() returns a plain array (no pagination).
+    local content, total_pages
+    if type(response) == "table" then
+        content = response.content or response
+        total_pages = response.totalPages or 1
+    end
+
+    -- Prefetch covers for the first page
+    if args.cover_type and type(content) == "table" then
+        self.plugin.cache:prefetchCovers(content, args.cover_type)
+    end
+
+    -- Build initial item_table
+    local item_table = {}
+    if type(content) == "table" then
+        for _, entry in ipairs(content) do
+            local item = args.item_builder(entry)
+            if item then table.insert(item_table, item) end
+        end
+    end
+    if #item_table == 0 then
+        table.insert(item_table, { text = args.empty_text or "Nothing found" })
+        total_pages = 1
+    end
+
+    -- Wire up lazy loader for pages 2+
+    local push_opts = args.push_opts or {}
+    if total_pages and total_pages > 1 then
+        local cover_type = args.cover_type
+        local item_builder = args.item_builder
+        local fetch_func = args.fetch_func
+        push_opts._pagination = {
+            loader = function(server_page, size)
+                local resp = fetch_func(server_page, size)
+                if not resp then return {} end
+                local new_content = (type(resp) == "table" and resp.content) or {}
+                if cover_type then
+                    self.plugin.cache:prefetchCovers(new_content, cover_type)
+                end
+                local items = {}
+                for _, entry in ipairs(new_content) do
+                    local item = item_builder(entry)
+                    if item then table.insert(items, item) end
+                end
+                return items
+            end,
+            server_page = 0,
+            total_pages = total_pages,
+            total_elements = (type(response) == "table" and response.totalElements) or (total_pages * page_size),
+            has_covers = (args.cover_type ~= nil),
+            page_size = page_size,
+        }
+    end
+
+    self:pushCatalog(args.title, item_table, push_opts)
+end
+
+-- ---------------------------------------------------------------------------
+-- Home screen
+-- ---------------------------------------------------------------------------
+
 function KomgaBrowser:getHomeItemTable()
     return {
-        { text = "Keep Reading", callback = function() self:showKeepReading() end },
-        { text = "On Deck", callback = function() self:showOnDeck() end },
+        { text = "Keep Reading",          callback = function() self:showKeepReading() end },
+        { text = "On Deck",               callback = function() self:showOnDeck() end },
         { text = "Recently Added Series", callback = function() self:showRecentSeries() end },
-        { text = "Recently Added Books", callback = function() self:showRecentBooks() end },
-        { text = "All Series", callback = function() self:showAllSeries() end },
-        { text = "Libraries", callback = function() self:showLibraries() end },
+        { text = "Recently Added Books",  callback = function() self:showRecentBooks() end },
+        { text = "All Series",            callback = function() self:showAllSeries() end },
+        { text = "Libraries",             callback = function() self:showLibraries() end },
     }
 end
 
 -- ---------------------------------------------------------------------------
--- API Integration
+-- Catalog views — all use _loadCatalog for consistent paginated fetching
 -- ---------------------------------------------------------------------------
 
 function KomgaBrowser:showRecentSeries()
     if not self.plugin.api then return end
-    local series_list = self.plugin.api:get_new_series()
-    local item_table = {}
-    if series_list and series_list.content then
-        self.plugin.cache:prefetchCovers(series_list.content, "series")
-        for _, series in ipairs(series_list.content) do
-            table.insert(item_table, {
-                text = series.metadata.title,
-                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end,
+    self:_loadCatalog{
+        title = "Recent Series",
+        fetch_func = function(page, size) return self.plugin.api:get_new_series(page, size) end,
+        item_builder = function(series)
+            return {
+                text = series.metadata and series.metadata.title or series.name,
+                callback = function() self:showBooksInSeries(series.id, series.metadata and series.metadata.title or series.name) end,
                 cover_id = series.id,
-                cover_type = "series"
-            })
-        end
-    end
-    if #item_table == 0 then table.insert(item_table, { text = "No recent series found" }) end
-    self:pushCatalog("Recent Series", item_table)
+                cover_type = "series",
+            }
+        end,
+        cover_type = "series",
+        empty_text = "No recent series found",
+    }
 end
 
 function KomgaBrowser:showKeepReading()
     if not self.plugin.api then return end
-    local book_list = self.plugin.api:get_books({read_status = "IN_PROGRESS", sort = "readProgress.readDate,desc"})
-    local item_table = {}
-    if book_list and book_list.content then
-        self.plugin.cache:prefetchCovers(book_list.content, "book")
-        for _, book in ipairs(book_list.content) do
-            table.insert(item_table, {
-                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. book.metadata.title,
+    self:_loadCatalog{
+        title = "Keep Reading",
+        fetch_func = function(page, size)
+            return self.plugin.api:get_books({read_status = "IN_PROGRESS", sort = "readProgress.readDate,desc"}, page, size)
+        end,
+        item_builder = function(book)
+            return {
+                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. (book.metadata and book.metadata.title or book.name),
                 callback = function() self:onBookSelect(book) end,
                 cover_id = book.id,
-                cover_type = "book"
-            })
-        end
-    end
-    if #item_table == 0 then table.insert(item_table, { text = "Nothing in keep reading" }) end
-    self:pushCatalog("Keep Reading", item_table)
+                cover_type = "book",
+            }
+        end,
+        cover_type = "book",
+        empty_text = "Nothing in keep reading",
+    }
 end
 
 function KomgaBrowser:showOnDeck()
     if not self.plugin.api then return end
-    local book_list = self.plugin.api:get_books_ondeck()
-    local item_table = {}
-    if book_list and book_list.content then
-        self.plugin.cache:prefetchCovers(book_list.content, "book")
-        for _, book in ipairs(book_list.content) do
-            table.insert(item_table, {
-                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. book.metadata.title,
+    self:_loadCatalog{
+        title = "On Deck",
+        fetch_func = function(page, size) return self.plugin.api:get_books_ondeck(page, size) end,
+        item_builder = function(book)
+            return {
+                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. (book.metadata and book.metadata.title or book.name),
                 callback = function() self:onBookSelect(book) end,
                 cover_id = book.id,
-                cover_type = "book"
-            })
-        end
-    end
-    if #item_table == 0 then table.insert(item_table, { text = "Nothing on deck" }) end
-    self:pushCatalog("On Deck", item_table)
+                cover_type = "book",
+            }
+        end,
+        cover_type = "book",
+        empty_text = "Nothing on deck",
+    }
 end
 
 function KomgaBrowser:showRecentBooks()
     if not self.plugin.api then return end
-    local book_list = self.plugin.api:get_books({sort = "createdDate,desc"})
-    local item_table = {}
-    if book_list and book_list.content then
-        self.plugin.cache:prefetchCovers(book_list.content, "book")
-        for _, book in ipairs(book_list.content) do
-            table.insert(item_table, {
-                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. book.metadata.title,
+    self:_loadCatalog{
+        title = "Recent Books",
+        fetch_func = function(page, size)
+            return self.plugin.api:get_books({sort = "createdDate,desc"}, page, size)
+        end,
+        item_builder = function(book)
+            return {
+                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. (book.metadata and book.metadata.title or book.name),
                 callback = function() self:onBookSelect(book) end,
                 cover_id = book.id,
-                cover_type = "book"
-            })
-        end
-    end
-    if #item_table == 0 then table.insert(item_table, { text = "No recent books found" }) end
-    self:pushCatalog("Recent Books", item_table)
+                cover_type = "book",
+            }
+        end,
+        cover_type = "book",
+        empty_text = "No recent books found",
+    }
 end
 
 function KomgaBrowser:showAllSeries()
     if not self.plugin.api then return end
-    local series_list = self.plugin.api:request("/api/v1/series?size=100")
-    local item_table = {}
-    if series_list and series_list.content then
-        self.plugin.cache:prefetchCovers(series_list.content, "series")
-        for _, series in ipairs(series_list.content) do
-            table.insert(item_table, {
-                text = series.metadata.title,
-                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end,
+    -- get_series(nil, page, size) fetches all series without library filter
+    self:_loadCatalog{
+        title = "All Series",
+        fetch_func = function(page, size) return self.plugin.api:get_series(nil, page, size) end,
+        item_builder = function(series)
+            return {
+                text = series.metadata and series.metadata.title or series.name,
+                callback = function() self:showBooksInSeries(series.id, series.metadata and series.metadata.title or series.name) end,
                 cover_id = series.id,
-                cover_type = "series"
-            })
-        end
-    end
-    if #item_table == 0 then table.insert(item_table, { text = "No series found" }) end
-    self:pushCatalog("All Series", item_table)
+                cover_type = "series",
+            }
+        end,
+        cover_type = "series",
+        empty_text = "No series found",
+    }
 end
 
 function KomgaBrowser:showLibraries()
     if not self.plugin.api then return end
-    local libs = self.plugin.api:get_libraries()
-    local item_table = {}
-    if libs then
-        for _, lib in ipairs(libs) do
-            table.insert(item_table, {
+    -- Libraries are returned as a plain array (not paginated) — _loadCatalog handles this
+    self:_loadCatalog{
+        title = "Libraries",
+        fetch_func = function(page, size) return self.plugin.api:get_libraries() end,
+        item_builder = function(lib)
+            return {
                 text = lib.name,
-                callback = function() self:showSeriesInLibrary(lib.id, lib.name) end
-            })
-        end
-    end
-    if #item_table == 0 then table.insert(item_table, { text = "No libraries found" }) end
-    self:pushCatalog("Libraries", item_table)
+                callback = function() self:showSeriesInLibrary(lib.id, lib.name) end,
+            }
+        end,
+        empty_text = "No libraries found",
+    }
 end
 
 function KomgaBrowser:showSeriesInLibrary(library_id, library_name)
     if not self.plugin.api then return end
-    local series_list = self.plugin.api:get_series(library_id)
-    local item_table = {}
-    if series_list and series_list.content then
-        -- get_series already calls prefetchCovers internally if cache is configured, but we force it here for explicit scoping
-        self.plugin.cache:prefetchCovers(series_list.content, "series")
-        for _, series in ipairs(series_list.content) do
-            table.insert(item_table, {
-                text = series.metadata.title,
-                callback = function() self:showBooksInSeries(series.id, series.metadata.title) end,
+    self:_loadCatalog{
+        title = library_name,
+        fetch_func = function(page, size) return self.plugin.api:get_series(library_id, page, size) end,
+        item_builder = function(series)
+            return {
+                text = series.metadata and series.metadata.title or series.name,
+                callback = function() self:showBooksInSeries(series.id, series.metadata and series.metadata.title or series.name) end,
                 cover_id = series.id,
-                cover_type = "series"
-            })
-        end
-    end
-    if #item_table == 0 then table.insert(item_table, { text = "No series in library" }) end
-    self:pushCatalog(library_name, item_table)
+                cover_type = "series",
+            }
+        end,
+        cover_type = "series",
+        empty_text = "No series in library",
+    }
 end
 
 function KomgaBrowser:showBooksInSeries(series_id, series_title, read_status)
     if not self.plugin.api then return end
-    local book_list = self.plugin.api:get_books_for_series(series_id, {read_status = read_status})
-    local item_table = {}
-    if book_list and book_list.content then
-        self.plugin.cache:prefetchCovers(book_list.content, "book")
-        for _, book in ipairs(book_list.content) do
-            table.insert(item_table, {
-                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. book.metadata.title,
-                callback = function() self:onBookSelect(book) end,
-                cover_id = book.id,
-                cover_type = "book"
-            })
-        end
-    end
-    if #item_table == 0 then table.insert(item_table, { text = "No books found" }) end
-    
+
     local display_title = series_title
     if read_status then
         local status_map = {
@@ -458,9 +634,34 @@ function KomgaBrowser:showBooksInSeries(series_id, series_title, read_status)
         end
         display_title = series_title .. status_str
     end
-    
-    self:pushCatalog(display_title, item_table, { is_series = true, series_id = series_id, read_status = read_status, original_title = series_title })
+
+    self:_loadCatalog{
+        title = display_title,
+        fetch_func = function(page, size)
+            return self.plugin.api:get_books_for_series(series_id, {read_status = read_status}, page, size)
+        end,
+        item_builder = function(book)
+            return {
+                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. (book.metadata and book.metadata.title or book.name),
+                callback = function() self:onBookSelect(book) end,
+                cover_id = book.id,
+                cover_type = "book",
+            }
+        end,
+        cover_type = "book",
+        empty_text = "No books found",
+        push_opts = {
+            is_series = true,
+            series_id = series_id,
+            read_status = read_status,
+            original_title = series_title,
+        },
+    }
 end
+
+-- ---------------------------------------------------------------------------
+-- Filter dialog
+-- ---------------------------------------------------------------------------
 
 function KomgaBrowser:showFilterDialog(series_id, series_title, current_status)
     local ButtonDialog = require("ui/widget/buttondialog")
@@ -468,31 +669,19 @@ function KomgaBrowser:showFilterDialog(series_id, series_title, current_status)
     
     local selected = {}
     if current_status and type(current_status) == "table" then
-        -- Check if it's an array (from opts) or a map (from toggle_action)
         if current_status[1] then
-            for _, v in ipairs(current_status) do
-                selected[v] = true
-            end
+            for _, v in ipairs(current_status) do selected[v] = true end
         else
-            -- It's a map or empty array, copy the state correctly
-            for k, v in pairs(current_status) do
-                selected[k] = v
-            end
+            for k, v in pairs(current_status) do selected[k] = v end
         end
     elseif current_status and type(current_status) == "string" then
         selected[current_status] = true
     else
-        selected = {
-            UNREAD = true,
-            IN_PROGRESS = true,
-            READ = true
-        }
+        selected = { UNREAD = true, IN_PROGRESS = true, READ = true }
     end
 
     local function toggle_action(id)
-        return function()
-            selected[id] = not selected[id]
-        end
+        return function() selected[id] = not selected[id] end
     end
     
     local function apply_action()
@@ -502,7 +691,7 @@ function KomgaBrowser:showFilterDialog(series_id, series_title, current_status)
             for k, v in pairs(selected) do
                 if v then table.insert(status_list, k) end
             end
-            self:onReturn() -- Pop the current series view
+            self:onReturn()  -- Pop current series view
             self:showBooksInSeries(series_id, series_title, status_list)
         end
     end
@@ -511,23 +700,28 @@ function KomgaBrowser:showFilterDialog(series_id, series_title, current_status)
         title = "Filter: " .. series_title,
         buttons = {
             {
-                { text = "Unread", checked_func = function() return selected["UNREAD"] end, callback = toggle_action("UNREAD") },
+                { text = "Unread",      checked_func = function() return selected["UNREAD"] end,      callback = toggle_action("UNREAD") },
                 { text = "In Progress", checked_func = function() return selected["IN_PROGRESS"] end, callback = toggle_action("IN_PROGRESS") },
-                { text = "Completed", checked_func = function() return selected["READ"] end, callback = toggle_action("READ") }
+                { text = "Completed",   checked_func = function() return selected["READ"] end,        callback = toggle_action("READ") }
             },
             {
                 { text = "Apply Filter", callback = apply_action() },
-                { text = "Cancel", callback = function() UIManager:close(dialog) end }
+                { text = "Cancel",       callback = function() UIManager:close(dialog) end }
             }
         }
     }
     UIManager:show(dialog)
 end
 
+-- ---------------------------------------------------------------------------
+-- Book selection
+-- ---------------------------------------------------------------------------
+
 function KomgaBrowser:onBookSelect(book)
+    local title = book.metadata and book.metadata.title or book.name or "this book"
     local ConfirmBox = require("ui/widget/confirmbox")
     UIManager:show(ConfirmBox:new{
-        text = "Download '" .. book.metadata.title .. "'?",
+        text = "Download '" .. title .. "'?",
         ok_callback = function()
             if self.plugin and self.plugin.sync then
                 self.plugin.sync:downloadBook(book, book.seriesTitle)

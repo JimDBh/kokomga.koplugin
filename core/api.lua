@@ -167,7 +167,7 @@ end
 -- Search books by filename or metadata
 function KomgaAPI:search_books(filename)
     local encoded_query = escape_uri(filename)
-    return self:request("/api/v1/books?search=" .. encoded_query .. "&size=10")
+    return self:request("/api/v1/books?search=" .. encoded_query)
 end
 
 -- Match local file to a Komga server book
@@ -254,55 +254,78 @@ function KomgaAPI:patch_read_progress(book_id, page, completed)
     return self:request("/api/v1/books/" .. book_id .. "/read-progress", "PATCH", payload)
 end
 
--- Get series inside a library
-function KomgaAPI:get_series(library_id)
-    local encoded_id = escape_uri(library_id)
-    return self:request("/api/v1/series?library_id=" .. encoded_id .. "&size=100")
+-- Get series, optionally filtered by library
+function KomgaAPI:get_series(library_id, page, size)
+    local params = {}
+    if library_id then table.insert(params, "library_id=" .. escape_uri(library_id)) end
+    if page then table.insert(params, "page=" .. tostring(page)) end
+    if size then table.insert(params, "size=" .. tostring(size)) end
+    local q = #params > 0 and ("?" .. table.concat(params, "&")) or ""
+    return self:request("/api/v1/series" .. q)
 end
 
-function KomgaAPI:get_books_for_series(series_id, filters)
+function KomgaAPI:get_books_for_series(series_id, filters, page, size)
     local encoded_id = escape_uri(series_id)
-    local query = "?size=100"
+    local params = {}
     if filters then
         if filters.read_status then
             if type(filters.read_status) == "table" then
                 for _, status in ipairs(filters.read_status) do
-                    query = query .. "&read_status=" .. escape_uri(status)
+                    table.insert(params, "read_status=" .. escape_uri(status))
                 end
             else
-                query = query .. "&read_status=" .. escape_uri(filters.read_status)
+                table.insert(params, "read_status=" .. escape_uri(filters.read_status))
             end
         end
-        if filters.sort then query = query .. "&sort=" .. escape_uri(filters.sort) end
+        if filters.sort then table.insert(params, "sort=" .. escape_uri(filters.sort)) end
     end
+    if page then table.insert(params, "page=" .. tostring(page)) end
+    if size then table.insert(params, "size=" .. tostring(size)) end
+    local query = #params > 0 and ("?" .. table.concat(params, "&")) or ""
     return self:request("/api/v1/series/" .. encoded_id .. "/books" .. query)
 end
 
 -- Download raw book file content
 
-function KomgaAPI:get_books(filters)
-    local query = "?size=100"
+function KomgaAPI:get_books(filters, page, size)
+    local params = {}
     if filters then
         if filters.read_status then
             if type(filters.read_status) == "table" then
                 for _, status in ipairs(filters.read_status) do
-                    query = query .. "&read_status=" .. escape_uri(status)
+                    table.insert(params, "read_status=" .. escape_uri(status))
                 end
             else
-                query = query .. "&read_status=" .. escape_uri(filters.read_status)
+                table.insert(params, "read_status=" .. escape_uri(filters.read_status))
             end
         end
-        if filters.sort then query = query .. "&sort=" .. escape_uri(filters.sort) end
+        if filters.sort then table.insert(params, "sort=" .. escape_uri(filters.sort)) end
     end
+    if page then table.insert(params, "page=" .. tostring(page)) end
+    if size then table.insert(params, "size=" .. tostring(size)) end
+    local query = #params > 0 and ("?" .. table.concat(params, "&")) or ""
     return self:request("/api/v1/books" .. query)
 end
 
-function KomgaAPI:get_books_ondeck()
-    return self:request("/api/v1/books/ondeck?size=50")
+function KomgaAPI:get_books_ondeck(page, size)
+    local params = {}
+    if page then table.insert(params, "page=" .. tostring(page)) end
+    if size then table.insert(params, "size=" .. tostring(size)) end
+    local q = #params > 0 and ("?" .. table.concat(params, "&")) or ""
+    return self:request("/api/v1/books/ondeck" .. q)
 end
 
-function KomgaAPI:get_new_series()
-    return self:request("/api/v1/series/new?size=50")
+function KomgaAPI:get_new_series(page, size)
+    local params = {}
+    if page then table.insert(params, "page=" .. tostring(page)) end
+    if size then table.insert(params, "size=" .. tostring(size)) end
+    local q = #params > 0 and ("?" .. table.concat(params, "&")) or ""
+    return self:request("/api/v1/series/new" .. q)
+end
+
+-- Get the next book in the series after book_id (404 = no next book → returns nil)
+function KomgaAPI:get_next_book(book_id)
+    return self:request("/api/v1/books/" .. escape_uri(book_id) .. "/next")
 end
 
 function KomgaAPI:download_book(book_id, dest_filepath)

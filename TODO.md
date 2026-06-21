@@ -23,3 +23,8 @@
 ## Plugin Infrastructure
 - [x] Create `_meta.lua` file for plugin metadata
 - [ ] Implement i18n (Internationalization) support
+
+## API & Data
+- [ ] `match_book` falls back to `content[1]` on no match — can return wrong book (false positive)
+- [x] Remove hardcoded `size=` caps on all list endpoints (was 50–100)
+- [x] Implement server-side lazy pagination for browser views (fetch on next-page tap)
