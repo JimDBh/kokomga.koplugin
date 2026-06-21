@@ -231,7 +231,6 @@ function KomgaPlugin:onReaderReady()
                 if book_id then
                     -- This is a Komga book, so we push progress to Komga instead of KOReader's sync server
                     self.sync:pushProgressForDocument(self.ui, not interactive, ensure_networking)
-                    return
                 end
             end
             
