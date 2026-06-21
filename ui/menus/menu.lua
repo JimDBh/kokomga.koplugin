@@ -53,67 +53,12 @@ function KomgaMenu:createSettingsMenu()
                     sub_item_table_func = function()
                         return {
                             {
-                                text = "Auto-Sync Read Progress",
-                                checked_func = function() return self.plugin.settings.auto_sync_on_open end,
+                                text = "Use Komga server progress when available",
+                                checked_func = function() return self.plugin.settings.use_komga_sync end,
                                 keep_menu_open = true,
                                 callback = function()
-                                    self.plugin.settings.auto_sync_on_open = not self.plugin.settings.auto_sync_on_open
-                                    self.plugin.settings.auto_sync_on_close = self.plugin.settings.auto_sync_on_open
+                                    self.plugin.settings.use_komga_sync = not self.plugin.settings.use_komga_sync
                                     self.plugin:saveSettings()
-                                end
-                            },
-                            {
-                                text_func = function()
-                                    local strategy = self.plugin.settings.sync_forward or 1
-                                    local strategy_name = strategy == 1 and "Prompt" or (strategy == 2 and "Silently" or "Never")
-                                    return "Sync to a newer state (" .. strategy_name .. ")"
-                                end,
-                                keep_menu_open = true,
-                                sub_item_table_func = function()
-                                    return {
-                                        {
-                                            text = "Prompt",
-                                            checked_func = function() return self.plugin.settings.sync_forward == 1 end,
-                                            callback = function() self.plugin.settings.sync_forward = 1; self.plugin:saveSettings() end
-                                        },
-                                        {
-                                            text = "Silently update",
-                                            checked_func = function() return self.plugin.settings.sync_forward == 2 end,
-                                            callback = function() self.plugin.settings.sync_forward = 2; self.plugin:saveSettings() end
-                                        },
-                                        {
-                                            text = "Never",
-                                            checked_func = function() return self.plugin.settings.sync_forward == 3 end,
-                                            callback = function() self.plugin.settings.sync_forward = 3; self.plugin:saveSettings() end
-                                        }
-                                    }
-                                end
-                            },
-                            {
-                                text_func = function()
-                                    local strategy = self.plugin.settings.sync_backward or 1
-                                    local strategy_name = strategy == 1 and "Prompt" or (strategy == 2 and "Silently" or "Never")
-                                    return "Sync to an older state (" .. strategy_name .. ")"
-                                end,
-                                keep_menu_open = true,
-                                sub_item_table_func = function()
-                                    return {
-                                        {
-                                            text = "Prompt",
-                                            checked_func = function() return self.plugin.settings.sync_backward == 1 end,
-                                            callback = function() self.plugin.settings.sync_backward = 1; self.plugin:saveSettings() end
-                                        },
-                                        {
-                                            text = "Silently update",
-                                            checked_func = function() return self.plugin.settings.sync_backward == 2 end,
-                                            callback = function() self.plugin.settings.sync_backward = 2; self.plugin:saveSettings() end
-                                        },
-                                        {
-                                            text = "Never",
-                                            checked_func = function() return self.plugin.settings.sync_backward == 3 end,
-                                            callback = function() self.plugin.settings.sync_backward = 3; self.plugin:saveSettings() end
-                                        }
-                                    }
                                 end
                             },
                             {

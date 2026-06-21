@@ -142,38 +142,54 @@ end
 
 -- Sync progress from Komga
 function KomgaSync:pullProgress(ui, is_manual)
-    if not self.plugin.api or not ui or not ui.document then return end
+    if not self.plugin.settings.use_komga_sync then return false end
+    if not self.plugin.api or not ui or not ui.document then return false end
     
     local filepath = ui.document.file
-    if not filepath then return end
+    if not filepath then return false end
     
     local book_id, err = self:getOrMatchBook(filepath)
     
     if not book_id then
         if is_manual then self.plugin:notify("Click 'Match' first.", "error") end
-        return
+        return false
     end
     
     if is_manual then self.plugin:notify("Checking server progress...", "info") end
     
+    logger.info("KomgaSync: Executing pullProgress for book", book_id)
+    
     local progress, p_err = self.plugin.api:get_read_progress(book_id)
-    if type(progress) ~= "table" or not progress.page then return end
+    if p_err then 
+        logger.err("KomgaSync: Failed to pull progress -", tostring(p_err))
+        return false -- FAILED to get komga progress
+    end
+    
+    logger.info("KomgaSync: Pulled progress from server:", progress and progress.page or "None")
+    
+    if type(progress) ~= "table" or not progress.page then 
+        logger.info("KomgaSync: Book found but no progress recorded on server")
+        return true -- Server responded successfully but 0% progress
+    end
     
     local remote_page = progress.page
     local current_page = ui.view.state.page or 1
     
     if remote_page == current_page then
         if is_manual then self.plugin:notify("Already at server progress", "info") end
-        return
+        return true
     end
+    
+    local PluginLoader = require("pluginloader")
+    local kosync = PluginLoader:getPluginInstance("kosync")
     
     local strategy
     local newer_msg
     if remote_page > current_page then
-        strategy = self.plugin.settings.sync_forward or 1
+        strategy = (kosync and kosync.settings.sync_forward) or 1
         newer_msg = "Server is ahead"
     else
-        strategy = self.plugin.settings.sync_backward or 1
+        strategy = (kosync and kosync.settings.sync_backward) or 1
         newer_msg = "Server is behind"
     end
     
@@ -193,6 +209,8 @@ function KomgaSync:pullProgress(ui, is_manual)
         UIManager:broadcastEvent(Event:new("GotoPage", remote_page))
         if is_manual then self.plugin:notify("Jumped to Page " .. remote_page, "info") end
     end
+    
+    return true
 end
 
 -- Push progress to Komga
@@ -217,7 +235,19 @@ function KomgaSync:pushProgressForDocument(ui, is_quiet)
     
     local current_page = ui.view.state.page or 1
     local total_pages = ui.view.state.page_count or (ui.document.getPageCount and ui.document:getPageCount()) or current_page
-    self:pushProgress(book_id, current_page, total_pages, is_quiet)
+    
+    local function do_push()
+        logger.info("KomgaSync: Executing pushProgress for book", book_id, "page", current_page)
+        self:pushProgress(book_id, current_page, total_pages, is_quiet)
+    end
+    
+    local NetworkMgr = require("ui/network/manager")
+    if NetworkMgr:willRerunWhenOnline(do_push) then
+        logger.info("KomgaSync: Network offline, pushProgress queued for when online.")
+        return
+    end
+    
+    do_push()
 end
 
 -- Get expected local path for a book

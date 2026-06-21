@@ -44,14 +44,7 @@ local KomgaPlugin = WidgetContainer:extend{
 local DEFAULT_SETTINGS = {
     server_url = "http://192.168.1.100:8080",
     api_key = "",
-    auto_sync_on_open = true,
-    auto_sync_on_close = true,
-    matched_books_cache = {}, 
-    download_dir = "",
-    download_to_subfolder = true,
-    sync_interval_pages = 5,
-    sync_forward = 1,  -- 1=Prompt, 2=Auto, 3=Never
-    sync_backward = 1, -- 1=Prompt, 2=Auto, 3=Never
+    use_komga_sync = true,
     cache_expiry_policy = "smart", 
     cache_expiry_mins = 60,
     cache_covers = false,
@@ -60,7 +53,11 @@ local DEFAULT_SETTINGS = {
     list_rows = 5,
     grid_columns = 3,
     grid_rows = 3,
-    library_metadata_cache = {}
+    library_metadata_cache = {},
+    matched_books_cache = {},
+    download_dir = "",
+    download_to_subfolder = true,
+    sync_interval_pages = 5
 }
 
 function KomgaPlugin:init()
@@ -187,16 +184,55 @@ function KomgaPlugin:onReaderReady()
     logger.info("KomgaPlugin: onReaderReady triggered for", tostring(filepath))
     self.is_active = true
     self.last_synced_page = ui and ui.view and ui.view.state.page or 1
-    if self.settings.auto_sync_on_open and filepath then
-        logger.info("KomgaPlugin: Auto-sync on open enabled, pulling progress")
-        local UIManager = require("ui/uimanager")
-        UIManager:nextTick(function() self.sync:pullProgress(ui) end)
+    
+    if self.ui.kosync and not self.orig_kosync_getProgress then
+        self.orig_kosync_getProgress = self.ui.kosync.getProgress
+        
+        self.ui.kosync.getProgress = function(kosync_instance, ensure_networking, interactive)
+            logger.info("KomgaPlugin: Intercepted KOSync:getProgress (ensure_networking=" .. tostring(ensure_networking) .. ")")
+            local function do_sync()
+                logger.info("KomgaPlugin: Executing do_sync inside getProgress interceptor")
+                local current_filepath = self.ui.document and self.ui.document.file
+                if current_filepath then
+                    local book_id = self.sync:getOrMatchBook(current_filepath)
+                    if book_id then
+                        local success = self.sync:pullProgress(self.ui, interactive)
+                        if success then
+                            logger.info("KomgaPlugin: Intercepted KOSync and used Komga sync")
+                            return -- Komga handled it (or found 0 progress), inhibit KOSync
+                        end
+                    end
+                end
+                
+                -- Fallback to KOSync natively
+                logger.info("KomgaPlugin: Falling back to native KOSync")
+                return self.orig_kosync_getProgress(kosync_instance, false, interactive)
+            end
+
+            if ensure_networking then
+                local NetworkMgr = require("ui/network/manager")
+                if NetworkMgr:willRerunWhenOnline(do_sync) then
+                    logger.info("KomgaPlugin: Network offline, getProgress queued for when online.")
+                    return
+                end
+            end
+            
+            return do_sync()
+        end
+    end
+
+    
+    -- If KOSync is present but its auto_sync is off, it won't schedule an automatic pull.
+    -- We force schedule one here so our interceptor catches it and Komga still auto-pulls!
+    if self.ui.kosync and not self.ui.kosync.settings.auto_sync then
+        UIManager:nextTick(function()
+            self.ui.kosync:getProgress(true, false)
+        end)
     end
 end
 
 function KomgaPlugin:onPageUpdate(page)
     if not self.is_active or not page then return end
-    if not self.settings.auto_sync_on_open then return end
     
     local interval = tonumber(self.settings.sync_interval_pages) or 0
     if interval > 0 then
@@ -218,14 +254,12 @@ function KomgaPlugin:onEndOfBook()
 end
 
 function KomgaPlugin:onCloseDocument()
-    logger.info("KomgaPlugin: onCloseDocument triggered")
     if not self.is_active then return end
     self.is_active = false
     local ui = self.ui
-    local document = ui and ui.document
-    local filepath = document and document.file
-    if self.settings.auto_sync_on_close and filepath then
-        self.sync:pushProgressForDocument(ui)
+    local filepath = ui and ui.document and ui.document.file
+    if filepath then
+        self.sync:pushProgressForDocument(ui, true)
     end
 end
 

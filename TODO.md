@@ -2,7 +2,7 @@
 
 ## Authentication & Network
 - [ ] Auto generate API key and save in settings
-- [ ] Prompt for Wi-Fi connection when using network
+- [ ] Prompt for Wi-Fi connection for komga browser
 
 ## Menu & Navigation
 - [x] Remove non-browser menu
@@ -17,8 +17,7 @@
 
 ## Reading & Sync Behavior
 - [ ] Auto-set reading direction to "Right to Left" when opening a file
-- [ ] Inhibit regular KOReader progress sync for Komga books:
-  - On open document: if it has a Komga ID, turn off regular auto-progress sync. Otherwise, respect the user's default setting.
+- [x] Inhibit regular KOReader progress sync for Komga books
 - [ ] Add functionality to match existing side-loaded files to Komga IDs
 
 ## Plugin Infrastructure
