@@ -1,11 +1,11 @@
 # Komga Plugin TODO
 
 ## Features
-- [ ] show cover / thumbnail in list. Need to cache as needed to avoid excessive fetching via network
+- [x] show cover / thumbnail in list and grid. Implemented caching to avoid excessive fetching via network
 - [ ] auto go to next chapter when finishing last page
 - [ ] auto fetch next X chapter in the background or after reading a chapter?
 - [ ] auto generate API key and save in settings
-- [x] add user settings option to configure list row height
+- [x] add user settings option to configure list row height, grid columns, and grid rows
 - [ ] progress sync - bypass / disable original progress sync if we got komga progress successfully - maybe not needed
 
 ## Testing / Verification

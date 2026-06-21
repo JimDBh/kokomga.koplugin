@@ -220,12 +220,9 @@ function KomgaSync:pushProgressForDocument(ui, is_quiet)
     self:pushProgress(book_id, current_page, total_pages, is_quiet)
 end
 
--- Download book
-function KomgaSync:downloadBook(book, series_title)
-    if not self.plugin.api then return end
-    
+-- Get expected local path for a book
+function KomgaSync:getBookLocalPath(book, series_title)
     local filename = book.name or book.id
-    
     local ext = ""
     if book.media and book.media.mediaType then
         local mt = book.media.mediaType
@@ -235,32 +232,35 @@ function KomgaSync:downloadBook(book, series_title)
         elseif mt == "application/x-rar-compressed" or mt == "application/x-rar" then ext = ".cbr"
         end
     end
-    
     if ext ~= "" and not filename:match("%.[a-zA-Z0-9]+$") then
         filename = filename .. ext
     end
     if not filename:match("%.[a-zA-Z0-9]+$") then
         filename = filename .. ".cbz"
     end
-
-    -- Clean the filename of bad characters
     filename = filename:gsub('[/%\\%:%*%?%"%<%>%|]', '_')
-
     local download_dir = self.plugin:getDownloadDir()
-    if not download_dir then
-        logger.err("KomgaSync: No download directory available, bailing out of downloadBook")
-        return
-    end
-    
+    if not download_dir then return nil, nil end
     if self.plugin.settings.download_to_subfolder and series_title then
         local clean_series = series_title:gsub('[/%\\%:%*%?%"%<%>%|]', '_')
         download_dir = download_dir .. "/" .. clean_series
     end
+    return download_dir .. "/" .. filename, filename
+end
+
+-- Download book
+function KomgaSync:downloadBook(book, series_title, on_success_callback)
+    if not self.plugin.api then return end
+    
+    local local_path, filename = self:getBookLocalPath(book, series_title)
+    if not local_path then
+        logger.err("KomgaSync: No download directory available, bailing out of downloadBook")
+        return
+    end
     
     local util = require("util")
-    util.makePath(download_dir .. "/")
-    
-    local local_path = download_dir .. "/" .. filename
+    local final_dir = local_path:match("(.*)/[^/]+")
+    util.makePath(final_dir .. "/")
     
     self.plugin:notify("Downloading " .. filename .. "...", "info")
     logger.info("KomgaSync: Starting download of book", book.id, "to", local_path)
@@ -331,6 +331,12 @@ function KomgaSync:downloadBook(book, series_title)
                 local os = require("os")
                 os.rename(tmp_path, local_path)
                 
+                if on_success_callback then
+                    UIManager:nextTick(function()
+                        on_success_callback(local_path)
+                    end)
+                end
+                
                 -- Tell FileBrowser to refresh directory and reload file items
                 UIManager:nextTick(function()
                     pcall(function()
@@ -353,6 +359,84 @@ function KomgaSync:downloadBook(book, series_title)
             self.plugin:notify("Failed: " .. tostring(err), "error")
         end
     end)
+end
+
+function KomgaSync:promptNextChapter(ui)
+    if not self.plugin.api or not ui or not ui.document then return end
+    local filepath = ui.document.file
+    if not filepath then return end
+
+    local book_id = self.plugin.settings.matched_books_cache[filepath]
+    if not book_id then return end
+
+    -- Fetch the book to get series_id
+    local book_meta, err = self.plugin.api:request("/api/v1/books/" .. book_id)
+    if not book_meta or not book_meta.seriesId then return end
+
+    -- Fetch series to get books and series title
+    local series_meta = self.plugin.api:request("/api/v1/series/" .. book_meta.seriesId)
+    local series_title = series_meta and series_meta.metadata and series_meta.metadata.title or book_meta.seriesTitle
+    
+    -- Fetch all books in series sorted
+    local books_res = self.plugin.api:get_books_for_series(book_meta.seriesId, { sort = "metadata.numberSort,asc", size = 500 })
+    if not books_res or not books_res.content then return end
+
+    local next_book = nil
+    for i, b in ipairs(books_res.content) do
+        if b.id == book_id and i < #books_res.content then
+            next_book = books_res.content[i+1]
+            break
+        end
+    end
+
+    if not next_book then
+        logger.info("KomgaSync: No next chapter found.")
+        self.plugin:notify("No next chapter found.", "info")
+        return
+    end
+
+    local local_path, filename = self:getBookLocalPath(next_book, series_title)
+    if not local_path then return end
+
+    local lfs = require("libs/libkoreader-lfs")
+    local is_downloaded = (lfs.attributes(local_path, "mode") == "file")
+
+    local ConfirmBox = require("ui/widget/confirmbox")
+    local UIManager = require("ui/uimanager")
+    local Event = require("ui/event")
+    
+    -- Dismiss KOReader's native end_document dialog if it is already open
+    local top_widget = UIManager:getTopWidget()
+    if top_widget and top_widget.id == "end_document" then
+        UIManager:close(top_widget)
+    end
+    
+    local title = next_book.metadata and next_book.metadata.title or next_book.name
+    local prompt_msg = is_downloaded and 
+        ("Open next chapter: " .. title .. "?") or 
+        ("Download & open next chapter: " .. title .. "?")
+
+    UIManager:show(ConfirmBox:new{
+        text = prompt_msg,
+        ok_callback = function()
+            local function open_doc(path)
+                logger.info("KomgaSync: Opening next chapter:", path)
+                UIManager:broadcastEvent(Event:new("CloseDocument"))
+                UIManager:scheduleIn(0.5, function()
+                    local ReaderUI = require("apps/reader/readerui")
+                    ReaderUI:showReader(path)
+                end)
+            end
+
+            if is_downloaded then
+                open_doc(local_path)
+            else
+                self:downloadBook(next_book, series_title, open_doc)
+            end
+        end,
+    })
+    
+    return true
 end
 
 return KomgaSync

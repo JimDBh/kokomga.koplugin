@@ -190,6 +190,17 @@ function KomgaPlugin:onPageUpdate(page)
     end
 end
 
+function KomgaPlugin:onEndOfBook()
+    logger.info("KomgaPlugin: onEndOfBook triggered")
+    if not self.is_active then return end
+    local ui = self.ui
+    if ui then
+        if self.sync:promptNextChapter(ui) then
+            return true
+        end
+    end
+end
+
 function KomgaPlugin:onCloseDocument()
     logger.info("KomgaPlugin: onCloseDocument triggered")
     if not self.is_active then return end

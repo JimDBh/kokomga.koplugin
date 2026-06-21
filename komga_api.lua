@@ -136,6 +136,8 @@ function KomgaAPI:request(path, method, body_data)
         return nil, "Server returned status " .. (res.code or "unknown")
     end
     
+    if res.code == 204 then return true end
+    
     local parsed, result = pcall(function() return JSON.decode(res.body) end)
     if not parsed then 
         logger.warn("KomgaAPI:request failed to parse JSON from", url)
