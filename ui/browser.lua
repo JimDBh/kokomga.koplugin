@@ -38,9 +38,8 @@ local function toggleTitleButtons(browser, opts)
             local Button = require("ui/widget/button")
             local Screen = require("device").screen
             title_bar.menu_btn = Button:new{
-                text = "≡",
+                icon = "appbar.menu",
                 bordersize = 0,
-                padding = Screen:scaleBySize(10),
                 show_parent = title_bar,
                 callback = function() end
             }

@@ -7,7 +7,7 @@
 ## Menu & Navigation
 - [x] Remove non-browser menu
 - [x] Move menu to the search menu
-- [ ] Increase the size of the hamburger icon
+- [x] Increase the size of the hamburger icon
 
 ## Browser & UI Features
 - [ ] Bulk download directly in the browser
