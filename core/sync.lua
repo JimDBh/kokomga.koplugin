@@ -173,7 +173,7 @@ function KomgaSync:pullProgress(ui, is_manual)
     end
     
     local remote_page = progress.page
-    local current_page = ui.view.state.page or 1
+    local current_page = ui.view and ui.view.state and ui.view.state.page or 1
     
     if remote_page == current_page then
         if is_manual then self.plugin:notify("Already at server progress", "info") end
@@ -233,8 +233,8 @@ function KomgaSync:pushProgressForDocument(ui, is_quiet)
     local book_id = self:getOrMatchBook(filepath)
     if not book_id then return end
     
-    local current_page = ui.view.state.page or 1
-    local total_pages = ui.view.state.page_count or (ui.document.getPageCount and ui.document:getPageCount()) or current_page
+    local current_page = ui.view and ui.view.state and ui.view.state.page or 1
+    local total_pages = ui.view and ui.view.state and ui.view.state.page_count or (ui.document and ui.document.getPageCount and ui.document:getPageCount()) or current_page
     
     local function do_push()
         logger.info("KomgaSync: Executing pushProgress for book", book_id, "page", current_page)

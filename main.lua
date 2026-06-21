@@ -182,7 +182,7 @@ function KomgaPlugin:onReaderReady()
     local filepath = document and document.file
     logger.info("KomgaPlugin: onReaderReady triggered for", tostring(filepath))
     self.is_active = true
-    self.last_synced_page = ui and ui.view and ui.view.state.page or 1
+    self.last_synced_page = ui and ui.view and ui.view.state and ui.view.state.page or 1
     
     if self.ui.kosync and not self.orig_kosync_getProgress then
         self.orig_kosync_getProgress = self.ui.kosync.getProgress
