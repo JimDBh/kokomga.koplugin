@@ -164,11 +164,15 @@ function KomgaSync:pullProgress(ui, is_manual)
         logger.err("KomgaSync: Failed to pull progress -", tostring(p_err))
         return false -- FAILED to get komga progress
     end
+    if type(progress) ~= "table" then
+        logger.info("KomgaSync: Book found but no progress recorded on server (progress type is", type(progress), ")")
+        return true
+    end
     
-    logger.info("KomgaSync: Pulled progress from server:", progress and progress.page or "None")
+    logger.info("KomgaSync: Pulled progress from server:", progress.page or "None")
     
-    if type(progress) ~= "table" or not progress.page then 
-        logger.info("KomgaSync: Book found but no progress recorded on server")
+    if not progress.page then 
+        logger.info("KomgaSync: Book found but progress.page is missing")
         return true -- Server responded successfully but 0% progress
     end
     
