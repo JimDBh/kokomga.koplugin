@@ -194,7 +194,7 @@ function KomgaMenu:createSettingsMenu()
     table.insert(submenu, {
         text = "Komga Browser (New)",
         callback = function()
-            local KomgaBrowser = require("komga_browser")
+            local KomgaBrowser = require("ui/browser")
             local browser = KomgaBrowser:new{ plugin = self.plugin }
             UIManager:show(browser)
         end

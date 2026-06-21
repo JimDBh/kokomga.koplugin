@@ -22,5 +22,5 @@
 - [ ] Add functionality to match existing side-loaded files to Komga IDs
 
 ## Plugin Infrastructure
-- [ ] Create `_meta.lua` file for plugin metadata
+- [x] Create `_meta.lua` file for plugin metadata
 - [ ] Implement i18n (Internationalization) support

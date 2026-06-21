@@ -1,6 +1,6 @@
 local Menu = require("ui/widget/menu")
-local KomgaListMenu = require("komga_list_menu")
-local KomgaGridMenu = require("komga_grid_menu")
+local KomgaListMenu = require("ui/menus/list_menu")
+local KomgaGridMenu = require("ui/menus/grid_menu")
 local UIManager = require("ui/uimanager")
 
 local function hideWidget(w)

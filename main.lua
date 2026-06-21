@@ -24,10 +24,10 @@ if type(plugin_name) == "string" then
     plugin_dir = plugin_name:match("(.-)[^/%.]+$") or ""
 end
 
-local KomgaAPI = require(plugin_dir .. "komga_api")
-local KomgaCache = require(plugin_dir .. "komga_cache")
-local KomgaSync = require(plugin_dir .. "komga_sync")
-local KomgaMenu = require(plugin_dir .. "komga_menu")
+local KomgaAPI = require(plugin_dir .. "core/api")
+local KomgaCache = require(plugin_dir .. "core/cache")
+local KomgaSync = require(plugin_dir .. "core/sync")
+local KomgaMenu = require(plugin_dir .. "ui/menus/menu")
 
 local KomgaPlugin = WidgetContainer:extend{
     name = "kokomga",
