@@ -192,7 +192,7 @@ function KomgaMenu:createSettingsMenu()
     })
 
     table.insert(submenu, {
-        text = "Komga Browser (New)",
+        text = "Komga Browser",
         callback = function()
             local KomgaBrowser = require("ui/browser")
             local browser = KomgaBrowser:new{ plugin = self.plugin }
@@ -200,87 +200,9 @@ function KomgaMenu:createSettingsMenu()
         end
     })
 
-    table.insert(submenu, {
-        text = "Explore Libs",
-        keep_menu_open = true,
-        sub_item_table_func = function() return self:createLibrariesMenu() end
-    })
-
     return submenu
 end
 
--- Library explorer menu
-function KomgaMenu:createLibrariesMenu()
-    local submenu = {}
-    
-    -- Show loading or placeholder if network is needed during menu eval... 
-    -- Actually this executes synchronously when menu is opened.
-    local libraries, err = self.plugin.cache:getLibraries()
-    
-    if not libraries then
-        logger.err("KomgaMenu: Error fetching libraries:", tostring(err))
-        table.insert(submenu, { text = "Error: " .. tostring(err), callback = function() end })
-        return submenu
-    end
-    
-    logger.dbg("KomgaMenu: Found", #libraries, "libraries")
-    for _, lib in ipairs(libraries) do
-        table.insert(submenu, {
-            text = lib.name or "Library",
-            keep_menu_open = true,
-            sub_item_table_func = function() return self:createSeriesMenu(lib.id, lib.name) end
-        })
-    end
-    
-    return submenu
-end
-
--- Series list menu
-function KomgaMenu:createSeriesMenu(library_id, library_name)
-    local submenu = {}
-    local series_page, err = self.plugin.cache:getSeries(library_id)
-    
-    if not series_page or not series_page.content then
-        logger.err("KomgaMenu: Error fetching series:", tostring(err))
-        table.insert(submenu, { text = "No series or Error", callback = function() end })
-        return submenu
-    end
-    
-    logger.dbg("KomgaMenu: Found", #series_page.content, "series for library_id", library_id)
-    for _, series in ipairs(series_page.content) do
-        table.insert(submenu, {
-            text = series.name or "Series",
-            keep_menu_open = true,
-            sub_item_table_func = function() return self:createBooksMenu(series.id, series.name) end
-        })
-    end
-    
-    return submenu
-end
-
--- Books list menu
-function KomgaMenu:createBooksMenu(series_id, series_title)
-    local submenu = {}
-    local books_page, err = self.plugin.cache:getBooks(series_id)
-    
-    if not books_page or not books_page.content then
-        logger.err("KomgaMenu: Error fetching books:", tostring(err))
-        table.insert(submenu, { text = "No books or Error", callback = function() end })
-        return submenu
-    end
-    
-    logger.dbg("KomgaMenu: Found", #books_page.content, "books for series_id", series_id)
-    for _, book in ipairs(books_page.content) do
-        table.insert(submenu, {
-            text = book.name or "Book",
-            callback = function()
-                self.plugin.sync:downloadBook(book, series_title)
-            end
-        })
-    end
-    
-    return submenu
-end
 
 -- UI prompt helper
 function KomgaMenu:promptInput(title, setting_key, is_number)

@@ -5,7 +5,7 @@
 - [ ] Prompt for Wi-Fi connection when using network
 
 ## Menu & Navigation
-- [ ] Remove non-browser menu
+- [x] Remove non-browser menu
 - [x] Move menu to the search menu
 - [ ] Increase the size of the hamburger icon
 
