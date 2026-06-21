@@ -13,7 +13,7 @@
 - [ ] Bulk download directly in the browser
 - [ ] Sort/Select what content to include in the browser
 - [ ] Filter options should be checkboxes (e.g., allow selecting both 'unread' + 'in progress')
-- [ ] No-cover list mode: customize row height. Try to use list height, but prioritize fitting everything on one page.
+- [x] No-cover list mode: customize row height. Try to use list height, but prioritize fitting everything on one page.
 
 ## Reading & Sync Behavior
 - [ ] Auto-set reading direction to "Right to Left" when opening a file

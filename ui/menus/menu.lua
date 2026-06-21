@@ -153,9 +153,9 @@ function KomgaMenu:createSettingsMenu()
                                 end
                             },
                             {
-                                text_func = function() return "List Mode Row Height (" .. (self.plugin.settings.list_row_height or 110) .. ")" end,
+                                text_func = function() return "List Mode Rows (" .. (self.plugin.settings.list_rows or 5) .. ")" end,
                                 keep_menu_open = true,
-                                callback = function() self:promptInput("List Row Height", "list_row_height", true) end
+                                callback = function() self:promptInput("List Rows", "list_rows", true) end
                             },
                             {
                                 text_func = function() return "Grid Mode Columns (" .. (self.plugin.settings.grid_columns or 3) .. ")" end,

@@ -94,10 +94,10 @@ local function toggleTitleButtons(browser, opts)
 
             if current_mode == "list" then
                 table.insert(buttons, { {
-                    text = "List Row Height",
+                    text = "List Rows",
                     callback = function()
                         if browser.menu_dialog then UIManager:close(browser.menu_dialog) end
-                        UIManager:show(createSettingDialog("List Row Height", "list_row_height", 110))
+                        UIManager:show(createSettingDialog("List Rows", "list_rows", 5))
                     end,
                     align = "left",
                 } })
@@ -227,7 +227,9 @@ function KomgaBrowser:setViewMode(mode, save_preference)
         self.updateItems = KomgaListMenu.updateItems
         self.columns = nil
         self.grid_rows = nil
-        self.item_height = self.plugin.settings.list_row_height or KomgaListMenu.item_height
+        local Screen = require("device").screen
+        local rows = self.plugin.settings.list_rows or 5
+        self.item_height = math.floor(Screen:getHeight() / rows)
     end
     
     if self.item_table then
