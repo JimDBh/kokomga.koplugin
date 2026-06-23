@@ -45,7 +45,7 @@ function KomgaGridItem:init()
     }
     local _ = self.menu and self.menu.plugin and self.menu.plugin.i18n and self.menu.plugin.i18n._ or function(s) return s end
     local title_text = self.entry.text or self.entry.title or _("Unknown")
-    if self.entry.cover_type == "book" then
+    if self.entry.cover_type == "book" and not self.entry.cover_id then
         if self.menu and self.menu.selected_books and self.menu.selected_books[self.entry.cover_id] then
             title_text = "[✓] " .. title_text
         else
@@ -92,6 +92,29 @@ function KomgaGridItem:init()
                     face = Font:getFace("cfont", 60),
                 }
             }
+        end
+
+        local badge_widget = FrameContainer:new{
+            bordersize = Screen:scaleBySize(1),
+            padding = Screen:scaleBySize(1),
+            background = Blitbuffer.COLOR_WHITE,
+            dimen = Geom:new{ w = Screen:scaleBySize(22), h = Screen:scaleBySize(22) },
+            CenterContainer:new{
+                dimen = Geom:new{ w = Screen:scaleBySize(18), h = Screen:scaleBySize(18) },
+                TextWidget:new{
+                    text = "✓",
+                    face = Font:getFace("smallinfofont", 14),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                }
+            }
+        }
+        
+        local orig_paintTo = cover_widget.paintTo
+        cover_widget.paintTo = function(this, canvas, x, y)
+            orig_paintTo(this, canvas, x, y)
+            if self.menu and self.menu.selected_books and self.menu.selected_books[self.entry.cover_id] then
+                badge_widget:paintTo(canvas, x + Screen:scaleBySize(4), y + Screen:scaleBySize(4))
+            end
         end
     end
     
