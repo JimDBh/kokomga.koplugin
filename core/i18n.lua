@@ -93,7 +93,20 @@ local translations = {
         ["Click 'Match' first."] = "请先匹配书籍。",
         ["Downloading %1..."] = "正在下载 %1...",
         ["Saved: %1"] = "已保存：%1",
-        ["Failed: %1"] = "失败：%1"
+        ["Failed: %1"] = "失败：%1",
+        ["New"] = "新",
+        ["Done"] = "已读",
+        ["Download '%1'"] = "下载 '%1'",
+        ["Download remaining %1 selected books"] = "下载剩余的 %1 本选中书籍",
+        ["Download %1 selected books"] = "下载 %1 本选中书籍",
+        ["All selected downloads finished!"] = "所有选中下载已完成！",
+        ["All %1 selected books are already downloaded"] = "所有 %1 本选中书籍均已下载",
+        ["Download remaining %1 books"] = "下载剩余的 %1 本书籍",
+        ["Download all %1 books in this list"] = "下载此列表中的所有 %1 本书籍",
+        ["All downloads finished!"] = "所有下载已完成！",
+        ["All %1 books in this list are already downloaded"] = "此列表中的所有 %1 本书籍均已下载",
+        ["Bulk Download Options"] = "批量下载选项",
+        ["Generate"] = "生成"
     }
 }
 
