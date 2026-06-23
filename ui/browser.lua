@@ -652,7 +652,7 @@ function KomgaBrowser:showBooksInSeries(series_id, series_title, read_status)
         end,
         item_builder = function(book)
             return {
-                text = (book.seriesTitle and book.seriesTitle .. " - " or "") .. (book.metadata and book.metadata.title or book.name),
+                text = book.metadata and book.metadata.title or book.name,
                 callback = function() self:onBookSelect(book) end,
                 cover_id = book.id,
                 cover_type = "book",
