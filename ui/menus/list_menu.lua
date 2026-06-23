@@ -124,33 +124,34 @@ function KomgaListItem:init()
         local progress_badge, prog_w, prog_h
 
         if self.entry.cover_type == "book" or self.entry.book ~= nil then
-            local book = self.entry.book or {}
-            
-            -- Check downloaded status
-            local is_downloaded = false
-            if self.menu and self.menu.plugin and self.menu.plugin.sync and book.id then
-                is_downloaded = self.menu.plugin.sync:isBookDownloaded(book)
-            end
-            if is_downloaded then
-                dl_badge, dl_w, dl_h = create_badge("↓", 14, false)
-            end
-
-            -- Check read progress status
-            local readProgress = book.readProgress
-            if not readProgress then
-                progress_badge, prog_w, prog_h = create_badge(_("New"), 10, true)
-            elseif readProgress.completed then
-                progress_badge, prog_w, prog_h = create_badge(_("Done"), 10, true)
-            else
-                local current_page = readProgress.page or 0
-                local total_pages = (book.media and book.media.pagesCount) or 0
-                local progress_text
-                if total_pages > 0 then
-                    progress_text = tostring(current_page) .. "/" .. tostring(total_pages)
-                else
-                    progress_text = tostring(current_page) .. "p"
+            local book = self.entry.book
+            if type(book) == "table" then
+                -- Check downloaded status
+                local is_downloaded = false
+                if self.menu and self.menu.plugin and self.menu.plugin.sync and book.id then
+                    is_downloaded = self.menu.plugin.sync:isBookDownloaded(book)
                 end
-                progress_badge, prog_w, prog_h = create_badge(progress_text, 10, true)
+                if is_downloaded then
+                    dl_badge, dl_w, dl_h = create_badge("↓", 14, false)
+                end
+
+                -- Check read progress status
+                local readProgress = book.readProgress
+                if type(readProgress) ~= "table" then
+                    progress_badge, prog_w, prog_h = create_badge(_("New"), 10, true)
+                elseif readProgress.completed then
+                    progress_badge, prog_w, prog_h = create_badge(_("Done"), 10, true)
+                else
+                    local current_page = readProgress.page or 0
+                    local total_pages = (book.media and book.media.pagesCount) or 0
+                    local progress_text
+                    if total_pages > 0 then
+                        progress_text = tostring(current_page) .. "/" .. tostring(total_pages)
+                    else
+                        progress_text = tostring(current_page) .. "p"
+                    end
+                    progress_badge, prog_w, prog_h = create_badge(progress_text, 10, true)
+                end
             end
         end
         
