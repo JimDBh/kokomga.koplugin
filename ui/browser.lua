@@ -805,11 +805,10 @@ function KomgaBrowser:onMenuHold(entry)
             end
         end
 
-        if #buttons > 0 then table.insert(buttons, {}) end -- spacer
         if #selected_to_download > 0 then
             local text
             if selected_already_downloaded_count > 0 then
-                text = T(_("Download remaining %1 selected books (excluding %2 downloaded)"), #selected_to_download, selected_already_downloaded_count)
+                text = T(_("Download remaining %1 selected books"), #selected_to_download)
             else
                 text = T(_("Download %1 selected books"), #selected_to_download)
             end
@@ -857,11 +856,10 @@ function KomgaBrowser:onMenuHold(entry)
             end
         end
 
-        if #buttons > 0 then table.insert(buttons, {}) end -- spacer
         if #all_to_download > 0 then
             local text
             if all_already_downloaded_count > 0 then
-                text = T(_("Download remaining %1 books (excluding %2 downloaded)"), #all_to_download, all_already_downloaded_count)
+                text = T(_("Download remaining %1 books"), #all_to_download)
             else
                 text = T(_("Download all %1 books in this list"), #all_to_download)
             end
@@ -889,7 +887,6 @@ function KomgaBrowser:onMenuHold(entry)
     end
     
     -- Option 4: "Cancel"
-    if #buttons > 0 then table.insert(buttons, {}) end -- spacer
     table.insert(buttons, { {
         text = _("Cancel"),
         callback = function()
