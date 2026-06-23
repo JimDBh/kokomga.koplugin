@@ -14,7 +14,7 @@
 
 ## File Management and Downloading
 - [x] Bulk download directly in the browser
-- [ ] Add `.cover.jpg` (series cover image) to the downloaded series folder
+- [x] Add `.cover.jpg` (series cover image) to the downloaded series folder
 
 ## Catalog Filtering and Settings
 - [ ] Sort/Select what content to include in the browser

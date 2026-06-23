@@ -403,6 +403,9 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
                 local os = require("os")
                 os.rename(tmp_path, local_path)
                 
+                -- Download series cover if missing and downloading to a subdir
+                self:downloadSeriesCoverIfMissing(book, final_dir, series_title)
+                
                 if on_success_callback then
                     UIManager:nextTick(function()
                         on_success_callback(local_path)
@@ -603,6 +606,77 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
     UIManager:show(dialog)
     
     return true
+end
+
+function KomgaSync:downloadSeriesCoverIfMissing(book, final_dir, series_title)
+    if not self.plugin.api then return end
+    
+    -- Check if we are downloading to a subdir of the series
+    local is_subdir = self.plugin.settings.download_to_subfolder and series_title and series_title ~= ""
+    if not is_subdir then
+        return
+    end
+
+    local lfs = require("libs/libkoreader-lfs")
+    
+    -- Check if final_dir is a valid directory
+    local mode = lfs.attributes(final_dir, "mode")
+    if mode ~= "directory" then
+        return
+    end
+
+    -- Check if .cover* already exists in final_dir
+    local has_cover = false
+    for file in lfs.dir(final_dir) do
+        if file:match("^%.cover%.") or file:match("^%.cover$") then
+            has_cover = true
+            break
+        end
+    end
+
+    if has_cover then
+        logger.info("KomgaSync: Series cover already exists in directory", final_dir)
+        return
+    end
+
+    -- Download the series cover if seriesId is available
+    local series_id = book.seriesId
+    if not series_id then
+        logger.warn("KomgaSync: Cannot download series cover, book.seriesId is missing")
+        return
+    end
+
+    logger.info("KomgaSync: Downloading series cover for series", series_id, "to", final_dir)
+    local img_data, err = self.plugin.api:download_series_thumbnail(series_id)
+    if not img_data or type(img_data) ~= "string" or #img_data == 0 then
+        logger.err("KomgaSync: Failed to download series cover:", tostring(err))
+        return
+    end
+
+    -- Detect image format
+    local ext = "jpg"
+    if img_data:sub(1, 4) == "\137PNG" or img_data:sub(1, 4) == "\137\080\078\071" then
+        ext = "png"
+    elseif img_data:sub(1, 3) == "\255\216\255" or img_data:sub(1, 2) == "\255\216" then
+        ext = "jpg"
+    elseif img_data:sub(1, 4) == "RIFF" and img_data:sub(9, 12) == "WEBP" then
+        ext = "webp"
+    elseif img_data:sub(1, 3) == "GIF" then
+        ext = "gif"
+    end
+
+    local cover_filename = ".cover." .. ext
+    local cover_filepath = final_dir .. "/" .. cover_filename
+
+    -- Write the cover image file
+    local f, f_err = io.open(cover_filepath, "wb")
+    if f then
+        f:write(img_data)
+        f:close()
+        logger.info("KomgaSync: Successfully saved series cover to", cover_filepath)
+    else
+        logger.err("KomgaSync: Failed to write series cover file:", tostring(f_err))
+    end
 end
 
 return KomgaSync

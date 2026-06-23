@@ -15,6 +15,8 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 - **Series Title Omission**:
   - Omitted prepending the series name from book titles when browsing books within a specific series since the series title is already displayed as the main title bar header.
   - Retained the series name prefix in multi-series lists (e.g. "Keep Reading", "On Deck", "Recently Added Books") for proper context.
+- **Series Cover Image Download**:
+  - Automatically downloads the series cover art (`.cover.<ext>`) to the series subdirectory on successful book download if no series cover is present, enabling folder-level cover previews in KOReader's coverbrowser.
 
 ### Fixed
 - **Memory Safety & Mutex Crash Prevention**:
