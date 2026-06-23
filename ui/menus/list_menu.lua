@@ -90,26 +90,81 @@ function KomgaListItem:init()
             }
         end
 
-        local badge_widget = FrameContainer:new{
-            bordersize = Screen:scaleBySize(1),
-            padding = Screen:scaleBySize(1),
-            background = Blitbuffer.COLOR_WHITE,
-            dimen = Geom:new{ w = Screen:scaleBySize(22), h = Screen:scaleBySize(22) },
-            CenterContainer:new{
-                dimen = Geom:new{ w = Screen:scaleBySize(18), h = Screen:scaleBySize(18) },
-                TextWidget:new{
-                    text = "✓",
-                    face = Font:getFace("smallinfofont", 14),
-                    fgcolor = Blitbuffer.COLOR_BLACK,
-                }
+        local function create_badge(text, font_size)
+            local text_widget = TextWidget:new{
+                text = text,
+                face = Font:getFace("smallinfofont", font_size or 11),
+                fgcolor = Blitbuffer.COLOR_BLACK,
             }
-        }
+            local text_size = text_widget:getSize()
+            local badge_w = text_size.w + Screen:scaleBySize(6)
+            local badge_h = text_size.h + Screen:scaleBySize(4)
+            
+            if badge_w < Screen:scaleBySize(22) then badge_w = Screen:scaleBySize(22) end
+            if badge_h < Screen:scaleBySize(22) then badge_h = Screen:scaleBySize(22) end
+
+            return FrameContainer:new{
+                bordersize = Screen:scaleBySize(1),
+                padding = 0,
+                background = Blitbuffer.COLOR_WHITE,
+                dimen = Geom:new{ w = badge_w, h = badge_h },
+                CenterContainer:new{
+                    dimen = Geom:new{ w = badge_w, h = badge_h },
+                    text_widget
+                }
+            }, badge_w, badge_h
+        end
+
+        local check_badge = create_badge("✓", 14)
+
+        local dl_badge, dl_w, dl_h
+        local progress_badge, prog_w, prog_h
+
+        if self.entry.cover_type == "book" or self.entry.book ~= nil then
+            local book = self.entry.book or {}
+            
+            -- Check downloaded status
+            local is_downloaded = false
+            if self.menu and self.menu.plugin and self.menu.plugin.sync and book.id then
+                is_downloaded = self.menu.plugin.sync:isBookDownloaded(book)
+            end
+            if is_downloaded then
+                dl_badge, dl_w, dl_h = create_badge("↓", 14)
+            end
+
+            -- Check read progress status
+            local readProgress = book.readProgress
+            if not readProgress then
+                progress_badge, prog_w, prog_h = create_badge(_("New"), 10)
+            elseif readProgress.completed then
+                progress_badge, prog_w, prog_h = create_badge(_("Done"), 10)
+            else
+                local current_page = readProgress.page or 0
+                local total_pages = (book.media and book.media.pagesCount) or 0
+                local progress_text
+                if total_pages > 0 then
+                    progress_text = tostring(current_page) .. "/" .. tostring(total_pages)
+                else
+                    progress_text = tostring(current_page) .. "p"
+                end
+                progress_badge, prog_w, prog_h = create_badge(progress_text, 10)
+            end
+        end
         
         local orig_paintTo = cover_widget.paintTo
         cover_widget.paintTo = function(this, canvas, x, y)
             orig_paintTo(this, canvas, x, y)
+            -- Top-Left: Selected Checkmark
             if self.menu and self.menu.selected_books and self.menu.selected_books[self.entry.cover_id] then
-                badge_widget:paintTo(canvas, x + Screen:scaleBySize(4), y + Screen:scaleBySize(4))
+                check_badge:paintTo(canvas, x + Screen:scaleBySize(4), y + Screen:scaleBySize(4))
+            end
+            -- Top-Right: Downloaded status
+            if dl_badge then
+                dl_badge:paintTo(canvas, x + cover_w - dl_w - Screen:scaleBySize(4), y + Screen:scaleBySize(4))
+            end
+            -- Bottom-Right: Progress status
+            if progress_badge then
+                progress_badge:paintTo(canvas, x + cover_w - prog_w - Screen:scaleBySize(4), y + cover_h - prog_h - Screen:scaleBySize(4))
             end
         end
 
