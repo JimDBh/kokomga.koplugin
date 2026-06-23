@@ -1,31 +1,24 @@
 # Komga Plugin TODO
 
-## Authentication & Network
-- [x] Prompt if server url / apikey is not set
-- [x] Auto generate API key and save in settings
-- [x] Prompt for Wi-Fi connection for komga browser
+## Visuals, Styling and E-Ink Optimizations
+- [ ] Add border/boundary to book/comic covers (adaptive black or white border depending on night/dark mode)
+- [ ] Improve list mode design: make separators/lines more distinct (the default line is too faint) and add horizontal padding (left and right)
+- [ ] Display the active filter status in the top title bar using short indicators, light highlights, icons, or emojis
 
-## Menu & Navigation
-- [x] Remove non-browser menu
-- [x] Move menu to the search menu
-- [x] Increase the size of the hamburger icon
+## Metadata and Status Display in Browser
+- [ ] Show more metadata in list view (e.g., authors, etc.) and optionally in grid view
+- [ ] Display reading progress / percentage indicator on the cover (grid) and items (list) in the browser
+- [ ] Add a visual indicator in the browser to show if a book is already downloaded locally
+- [ ] For series, show a completion banner or text status indicating reading progress (e.g., "X/N books read")
+- [ ] Omit the series name from chapter/book names in the browser/reader list since it is already shown in the top title
 
-## Browser & UI Features
+## File Management and Downloading
 - [ ] Bulk download directly in the browser
+- [ ] Add `.cover.jpg` (series cover image) to the downloaded series folder
+
+## Catalog Filtering and Settings
 - [ ] Sort/Select what content to include in the browser
-- [x] Filter options should be checkboxes (e.g., allow selecting both 'unread' + 'in progress')
-- [x] No-cover list mode: customize row height. Try to use list height, but prioritize fitting everything on one page.
 
-## Reading & Sync Behavior
-- [x] Auto-set reading direction to "Right to Left" when opening a file
-- [x] Inhibit regular KOReader progress sync for Komga books
+## Sync and Core Functionality
 - [ ] Add functionality to match existing side-loaded files to Komga IDs
-
-## Plugin Infrastructure
-- [x] Create `_meta.lua` file for plugin metadata
-- [x] Implement i18n (Internationalization) support
-
-## API & Data
 - [ ] `match_book` falls back to `content[1]` on no match — can return wrong book (false positive)
-- [x] Remove hardcoded `size=` caps on all list endpoints (was 50–100)
-- [x] Implement server-side lazy pagination for browser views (fetch on next-page tap)
