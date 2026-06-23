@@ -12,6 +12,9 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 - **Aesthetic Cover Indicators**:
   - Added visual indicators for local download status ("↓") on both list and grid item covers.
   - Implemented real-time reading progress indicators ("New", "Done", page/total pages, or raw page count) for list and grid views in the browser catalog.
+- **Series Title Omission**:
+  - Omitted prepending the series name from book titles when browsing books within a specific series since the series title is already displayed as the main title bar header.
+  - Retained the series name prefix in multi-series lists (e.g. "Keep Reading", "On Deck", "Recently Added Books") for proper context.
 
 ### Fixed
 - **Memory Safety & Mutex Crash Prevention**:
