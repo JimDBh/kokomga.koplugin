@@ -89,7 +89,7 @@ function KomgaListItem:init()
                 }
             }
         end
-        
+
         local badge_widget = FrameContainer:new{
             bordersize = Screen:scaleBySize(1),
             padding = Screen:scaleBySize(1),

@@ -746,6 +746,18 @@ function KomgaBrowser:onBookSelect(book)
 end
 
 function KomgaBrowser:onMenuHold(entry)
+    local is_book = false
+    if entry then
+        if entry.cover_type == "book" or entry.book ~= nil then
+            is_book = true
+        elseif entry.id and not entry.cover_type and not entry.callback then
+            is_book = true
+        end
+    end
+    if not is_book then
+        return
+    end
+
     local _ = self.plugin.i18n._
     local T = self.plugin.i18n.T
     local ButtonDialog = require("ui/widget/buttondialog")
