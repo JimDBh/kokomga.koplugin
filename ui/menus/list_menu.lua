@@ -44,6 +44,7 @@ function KomgaListItem:init()
             GestureRange:new{ ges = "hold", range = self.dimen },
         },
     }
+    self.badges = {}
 
     local title_face = Font:getFace("smallinfofont", 20)
     local _ = self.menu and self.menu.plugin and self.menu.plugin.i18n and self.menu.plugin.i18n._ or function(s) return s end
@@ -103,7 +104,7 @@ function KomgaListItem:init()
             if badge_w < Screen:scaleBySize(22) then badge_w = Screen:scaleBySize(22) end
             if badge_h < Screen:scaleBySize(22) then badge_h = Screen:scaleBySize(22) end
 
-            return FrameContainer:new{
+            local badge = FrameContainer:new{
                 bordersize = Screen:scaleBySize(1),
                 padding = 0,
                 background = Blitbuffer.COLOR_WHITE,
@@ -112,7 +113,9 @@ function KomgaListItem:init()
                     dimen = Geom:new{ w = badge_w, h = badge_h },
                     text_widget
                 }
-            }, badge_w, badge_h
+            }
+            table.insert(self.badges, badge)
+            return badge, badge_w, badge_h
         end
 
         local check_badge = create_badge("✓", 14)
@@ -236,6 +239,13 @@ function KomgaListItem:onHoldSelect(arg, ges)
 end
 
 function KomgaListItem:free()
+    if self.badges then
+        for _, badge in ipairs(self.badges) do
+            badge:free()
+        end
+        self.badges = nil
+    end
+    InputContainer.free(self)
 end
 
 local KomgaListMenu = Menu:extend{
