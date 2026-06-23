@@ -43,7 +43,6 @@ function KomgaGridItem:init()
             GestureRange:new{ ges = "hold", range = self.dimen },
         },
     }
-    self.badges = {}
     local _ = self.menu and self.menu.plugin and self.menu.plugin.i18n and self.menu.plugin.i18n._ or function(s) return s end
     local title_text = self.entry.text or self.entry.title or _("Unknown")
     if self.entry.cover_type == "book" and not self.entry.cover_id then
@@ -95,18 +94,16 @@ function KomgaGridItem:init()
             }
         end
 
-        local function create_badge(text, font_size)
-            local text_widget = TextWidget:new{
-                text = text,
-                face = Font:getFace("smallinfofont", font_size or 11),
-                fgcolor = Blitbuffer.COLOR_BLACK,
-            }
-            local text_size = text_widget:getSize()
-            local badge_w = text_size.w + Screen:scaleBySize(6)
-            local badge_h = text_size.h + Screen:scaleBySize(4)
-            
-            if badge_w < Screen:scaleBySize(22) then badge_w = Screen:scaleBySize(22) end
-            if badge_h < Screen:scaleBySize(22) then badge_h = Screen:scaleBySize(22) end
+        local function create_badge(text, font_size, is_progress)
+            local badge_w, badge_h
+            if is_progress then
+                local text_len = string.len(text)
+                badge_w = math.floor(Screen:scaleBySize(12) + text_len * Screen:scaleBySize(6))
+                badge_h = Screen:scaleBySize(18)
+            else
+                badge_w = Screen:scaleBySize(22)
+                badge_h = Screen:scaleBySize(22)
+            end
 
             local badge = FrameContainer:new{
                 bordersize = Screen:scaleBySize(1),
@@ -115,14 +112,17 @@ function KomgaGridItem:init()
                 dimen = Geom:new{ w = badge_w, h = badge_h },
                 CenterContainer:new{
                     dimen = Geom:new{ w = badge_w, h = badge_h },
-                    text_widget
+                    TextWidget:new{
+                        text = text,
+                        face = Font:getFace("smallinfofont", font_size or 11),
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    }
                 }
             }
-            table.insert(self.badges, badge)
             return badge, badge_w, badge_h
         end
 
-        local check_badge = create_badge("✓", 14)
+        local check_badge = create_badge("✓", 14, false)
 
         local dl_badge, dl_w, dl_h
         local progress_badge, prog_w, prog_h
@@ -136,15 +136,15 @@ function KomgaGridItem:init()
                 is_downloaded = self.menu.plugin.sync:isBookDownloaded(book)
             end
             if is_downloaded then
-                dl_badge, dl_w, dl_h = create_badge("↓", 14)
+                dl_badge, dl_w, dl_h = create_badge("↓", 14, false)
             end
 
             -- Check read progress status
             local readProgress = book.readProgress
             if not readProgress then
-                progress_badge, prog_w, prog_h = create_badge(_("New"), 10)
+                progress_badge, prog_w, prog_h = create_badge(_("New"), 10, true)
             elseif readProgress.completed then
-                progress_badge, prog_w, prog_h = create_badge(_("Done"), 10)
+                progress_badge, prog_w, prog_h = create_badge(_("Done"), 10, true)
             else
                 local current_page = readProgress.page or 0
                 local total_pages = (book.media and book.media.pagesCount) or 0
@@ -154,7 +154,7 @@ function KomgaGridItem:init()
                 else
                     progress_text = tostring(current_page) .. "p"
                 end
-                progress_badge, prog_w, prog_h = create_badge(progress_text, 10)
+                progress_badge, prog_w, prog_h = create_badge(progress_text, 10, true)
             end
         end
         
@@ -248,16 +248,6 @@ function KomgaGridItem:onHoldSelect(arg, ges)
         return true
     end
     return false
-end
-
-function KomgaGridItem:free()
-    if self.badges then
-        for _, badge in ipairs(self.badges) do
-            badge:free()
-        end
-        self.badges = nil
-    end
-    InputContainer.free(self)
 end
 
 local KomgaGridMenu = Menu:extend{
