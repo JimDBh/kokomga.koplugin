@@ -9,6 +9,16 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
   - Selection gesture on book items (tap to toggle selection with checkmark overlays directly on cover images).
   - Contextual menu triggered by holding any book item to view download options (long-press is ignored for non-book entries).
   - Clear, simplified options to download selected books, download all books, or cancel (excluding duplicate/already downloaded books seamlessly).
+- **Aesthetic Cover Indicators**:
+  - Added visual indicators for local download status ("↓") on both list and grid item covers.
+  - Implemented real-time reading progress indicators ("New", "Done", page/total pages, or raw page count) for list and grid views in the browser catalog.
+
+### Fixed
+- **Memory Safety & Mutex Crash Prevention**:
+  - Re-architected item layout rendering to avoid calling native `:getSize()` on un-parented `TextWidget` instances, eliminating the intermittent Freetype-related "pthread_mutex_lock called on a destroyed mutex" crash in KOReader.
+  - Eliminated custom manual memory/badge tracking and destruction logic in favor of KOReader's native garbage collector and widget parenting lifecycle.
+- **Robust Type Checking**:
+  - Added defensive type verification (`type(...) == "table"`) on both `book` entries and `readProgress` objects to prevent the runtime error "attempt to index local 'readProgress' (a function value)".
 
 ---
 

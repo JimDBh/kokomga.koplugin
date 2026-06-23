@@ -7,8 +7,8 @@
 
 ## Metadata and Status Display in Browser
 - [ ] Show more metadata in list view (e.g., authors, etc.) and optionally in grid view
-- [ ] Display reading progress / percentage indicator on the cover (grid) and items (list) in the browser
-- [ ] Add a visual indicator in the browser to show if a book is already downloaded locally
+- [x] Display reading progress / percentage indicator on the cover (grid) and items (list) in the browser
+- [x] Add a visual indicator in the browser to show if a book is already downloaded locally
 - [ ] For series, show a completion banner or text status indicating reading progress (e.g., "X/N books read")
 - [ ] Omit the series name from chapter/book names in the browser/reader list since it is already shown in the top title
 
