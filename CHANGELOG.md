@@ -6,10 +6,9 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ### Added
 - **Bulk Download in Browser**:
-  - Selection gesture on book items (tap to toggle selection checkbox `[✓]`).
-  - Contextual menu triggered by long-press holding any item to view download options.
-  - Options to download the current book, download selected remaining books (excluding already downloaded ones), or download all remaining books in the current view list.
-  - Automatically filters lists of books to exclude already downloaded ones, saving bandwidth and local storage.
+  - Selection gesture on book items (tap to toggle selection with checkmark overlays directly on cover images).
+  - Contextual menu triggered by holding any book item to view download options (long-press is ignored for non-book entries).
+  - Clear, simplified options to download selected books, download all books, or cancel (excluding duplicate/already downloaded books seamlessly).
 
 ---
 
