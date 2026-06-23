@@ -39,9 +39,19 @@ function KomgaGridItem:init()
         TapSelect = {
             GestureRange:new{ ges = "tap", range = self.dimen },
         },
+        HoldSelect = {
+            GestureRange:new{ ges = "hold", range = self.dimen },
+        },
     }
     local _ = self.menu and self.menu.plugin and self.menu.plugin.i18n and self.menu.plugin.i18n._ or function(s) return s end
     local title_text = self.entry.text or self.entry.title or _("Unknown")
+    if self.entry.cover_type == "book" then
+        if self.menu and self.menu.selected_books and self.menu.selected_books[self.entry.cover_id] then
+            title_text = "[✓] " .. title_text
+        else
+            title_text = "[ ] " .. title_text
+        end
+    end
     local text_width = self.width - (GRID_LAYOUT.padding * 2)
     
     local cover_widget
@@ -151,6 +161,14 @@ function KomgaGridItem:onTapSelect(arg, ges)
     return false
 end
 
+function KomgaGridItem:onHoldSelect(arg, ges)
+    if self.menu and self.menu.onMenuHold then
+        self.menu:onMenuHold(self.entry)
+        return true
+    end
+    return false
+end
+
 function KomgaGridItem:free()
 end
 
@@ -245,6 +263,10 @@ function KomgaGridMenu:onMenuSelect(item)
     if item and item.callback then
         item.callback(item)
     end
+end
+
+function KomgaGridMenu:onMenuHold(item)
+    -- Will be overridden or looked up in subclass/metatable
 end
 
 return KomgaGridMenu

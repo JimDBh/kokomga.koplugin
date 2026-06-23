@@ -520,6 +520,7 @@ function KomgaBrowser:showKeepReading()
                 callback = function() self:onBookSelect(book) end,
                 cover_id = book.id,
                 cover_type = "book",
+                book = book,
             }
         end,
         cover_type = "book",
@@ -538,6 +539,7 @@ function KomgaBrowser:showOnDeck()
                 callback = function() self:onBookSelect(book) end,
                 cover_id = book.id,
                 cover_type = "book",
+                book = book,
             }
         end,
         cover_type = "book",
@@ -558,6 +560,7 @@ function KomgaBrowser:showRecentBooks()
                 callback = function() self:onBookSelect(book) end,
                 cover_id = book.id,
                 cover_type = "book",
+                book = book,
             }
         end,
         cover_type = "book",
@@ -653,6 +656,7 @@ function KomgaBrowser:showBooksInSeries(series_id, series_title, read_status)
                 callback = function() self:onBookSelect(book) end,
                 cover_id = book.id,
                 cover_type = "book",
+                book = book,
             }
         end,
         cover_type = "book",
@@ -727,20 +731,179 @@ end
 -- ---------------------------------------------------------------------------
 
 function KomgaBrowser:onBookSelect(book)
-    local title = book.metadata and book.metadata.title or book.name or "this book"
-    local ConfirmBox = require("ui/widget/confirmbox")
+    if not self.selected_books then
+        self.selected_books = {}
+    end
+    local book_id = book.id
+    if self.selected_books[book_id] then
+        self.selected_books[book_id] = nil
+        logger.info("KomgaBrowser: Deselected book", book_id)
+    else
+        self.selected_books[book_id] = book
+        logger.info("KomgaBrowser: Selected book", book_id)
+    end
+    self:updateItems()
+end
+
+function KomgaBrowser:onMenuHold(entry)
     local _ = self.plugin.i18n._
     local T = self.plugin.i18n.T
-    UIManager:show(ConfirmBox:new{
-        text = T(_("Download '%1'?"), title),
-        ok_callback = function()
-            if self.plugin and self.plugin.sync then
-                self.plugin.sync:downloadBook(book, book.seriesTitle)
-            else
-                self.plugin:notify(_("Sync module not initialized"), "error")
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local dialog
+    
+    local buttons = {}
+    
+    -- Option 1: "Download this book"
+    local target_book = nil
+    if entry and entry.cover_type == "book" and entry.book then
+        target_book = entry.book
+    elseif entry and entry.id and not entry.cover_type then
+        target_book = entry
+    end
+    
+    if target_book then
+        local title = target_book.metadata and target_book.metadata.title or target_book.name or "this book"
+        table.insert(buttons, { {
+            text = T(_("Download '%1'"), title),
+            callback = function()
+                UIManager:close(dialog)
+                self.plugin.sync:downloadBook(target_book, target_book.seriesTitle)
+            end,
+            align = "left"
+        } })
+    end
+    
+    -- Option 2: "Download X selected books"
+    local selected_list = {}
+    if self.selected_books then
+        if self.item_table then
+            for _, item in ipairs(self.item_table) do
+                if item.cover_type == "book" and self.selected_books[item.cover_id] then
+                    table.insert(selected_list, item.book)
+                end
             end
+        end
+        local inserted_ids = {}
+        for _, b in ipairs(selected_list) do
+            inserted_ids[b.id] = true
+        end
+        for id, b in pairs(self.selected_books) do
+            if not inserted_ids[id] then
+                table.insert(selected_list, b)
+            end
+        end
+    end
+    
+    if #selected_list > 0 then
+        local selected_to_download = {}
+        local selected_already_downloaded_count = 0
+        for _, b in ipairs(selected_list) do
+            if self.plugin.sync:isBookDownloaded(b) then
+                selected_already_downloaded_count = selected_already_downloaded_count + 1
+            else
+                table.insert(selected_to_download, b)
+            end
+        end
+
+        if #buttons > 0 then table.insert(buttons, {}) end -- spacer
+        if #selected_to_download > 0 then
+            local text
+            if selected_already_downloaded_count > 0 then
+                text = T(_("Download remaining %1 selected books (excluding %2 downloaded)"), #selected_to_download, selected_already_downloaded_count)
+            else
+                text = T(_("Download %1 selected books"), #selected_to_download)
+            end
+            table.insert(buttons, { {
+                text = text,
+                callback = function()
+                    UIManager:close(dialog)
+                    self.plugin.sync:downloadBooksSeq(selected_to_download, 1, function()
+                        self.plugin:notify(_("All selected downloads finished!"), "info")
+                        self.selected_books = {}
+                        self:updateItems()
+                    end)
+                end,
+                align = "left"
+            } })
+        else
+            table.insert(buttons, { {
+                text = T(_("All %1 selected books are already downloaded"), #selected_list),
+                callback = function()
+                    UIManager:close(dialog)
+                end,
+                align = "left"
+            } })
+        end
+    end
+    
+    -- Option 3: "Download all books"
+    local all_books = {}
+    if self.item_table then
+        for _, item in ipairs(self.item_table) do
+            if item.cover_type == "book" and item.book then
+                table.insert(all_books, item.book)
+            end
+        end
+    end
+    
+    if #all_books > 0 then
+        local all_to_download = {}
+        local all_already_downloaded_count = 0
+        for _, b in ipairs(all_books) do
+            if self.plugin.sync:isBookDownloaded(b) then
+                all_already_downloaded_count = all_already_downloaded_count + 1
+            else
+                table.insert(all_to_download, b)
+            end
+        end
+
+        if #buttons > 0 then table.insert(buttons, {}) end -- spacer
+        if #all_to_download > 0 then
+            local text
+            if all_already_downloaded_count > 0 then
+                text = T(_("Download remaining %1 books (excluding %2 downloaded)"), #all_to_download, all_already_downloaded_count)
+            else
+                text = T(_("Download all %1 books in this list"), #all_to_download)
+            end
+            table.insert(buttons, { {
+                text = text,
+                callback = function()
+                    UIManager:close(dialog)
+                    self.plugin.sync:downloadBooksSeq(all_to_download, 1, function()
+                        self.plugin:notify(_("All downloads finished!"), "info")
+                        self.selected_books = {}
+                        self:updateItems()
+                    end)
+                end,
+                align = "left"
+            } })
+        else
+            table.insert(buttons, { {
+                text = T(_("All %1 books in this list are already downloaded"), #all_books),
+                callback = function()
+                    UIManager:close(dialog)
+                end,
+                align = "left"
+            } })
+        end
+    end
+    
+    -- Option 4: "Cancel"
+    if #buttons > 0 then table.insert(buttons, {}) end -- spacer
+    table.insert(buttons, { {
+        text = _("Cancel"),
+        callback = function()
+            UIManager:close(dialog)
         end,
-    })
+        align = "center"
+    } })
+    
+    dialog = ButtonDialog:new{
+        title = _("Bulk Download Options"),
+        buttons = buttons,
+        shrink_unneeded_width = true,
+    }
+    UIManager:show(dialog)
 end
 
 return KomgaBrowser

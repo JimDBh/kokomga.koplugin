@@ -307,13 +307,23 @@ function KomgaSync:getBookLocalPath(book, series_title)
     return download_dir .. "/" .. filename, filename
 end
 
+function KomgaSync:isBookDownloaded(book)
+    local local_path = self:getBookLocalPath(book, book.seriesTitle)
+    if not local_path then return false end
+    local lfs = require("libs/libkoreader-lfs")
+    return lfs.attributes(local_path, "mode") == "file"
+end
+
 -- Download book
-function KomgaSync:downloadBook(book, series_title, on_success_callback)
+function KomgaSync:downloadBook(book, series_title, on_success_callback, on_failure_callback)
     if not self.plugin.api then return end
     
     local local_path, filename = self:getBookLocalPath(book, series_title)
     if not local_path then
         logger.err("KomgaSync: No download directory available, bailing out of downloadBook")
+        if on_failure_callback then
+            on_failure_callback("No download directory")
+        end
         return
     end
     
@@ -419,8 +429,30 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback)
         else
             logger.err("KomgaSync: Download failed", tostring(err))
             self.plugin:notify(T(_("Failed: %1"), tostring(err)), "error")
+            if on_failure_callback then
+                UIManager:nextTick(function()
+                    on_failure_callback(tostring(err))
+                end)
+            end
         end
     end)
+end
+
+function KomgaSync:downloadBooksSeq(books, index, on_done_callback)
+    index = index or 1
+    if index > #books then
+        if on_done_callback then
+            on_done_callback()
+        end
+        return
+    end
+    
+    local book = books[index]
+    local next_step = function()
+        self:downloadBooksSeq(books, index + 1, on_done_callback)
+    end
+    
+    self:downloadBook(book, book.seriesTitle, next_step, next_step)
 end
 
 function KomgaSync:promptNextChapter(ui, show_native_func)

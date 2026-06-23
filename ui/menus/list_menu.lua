@@ -40,11 +40,21 @@ function KomgaListItem:init()
         TapSelect = {
             GestureRange:new{ ges = "tap", range = self.dimen },
         },
+        HoldSelect = {
+            GestureRange:new{ ges = "hold", range = self.dimen },
+        },
     }
 
     local title_face = Font:getFace("smallinfofont", 20)
     local _ = self.menu and self.menu.plugin and self.menu.plugin.i18n and self.menu.plugin.i18n._ or function(s) return s end
     local title_text = self.entry.text or self.entry.title or _("Unknown")
+    if self.entry.cover_type == "book" then
+        if self.menu and self.menu.selected_books and self.menu.selected_books[self.entry.cover_id] then
+            title_text = "[✓] " .. title_text
+        else
+            title_text = "[ ] " .. title_text
+        end
+    end
     local text_width = self.width - (LIST_LAYOUT.padding_h * 2)
     
     local cover_widget
@@ -133,6 +143,14 @@ end
 function KomgaListItem:onTapSelect(arg, ges)
     if self.menu and self.menu.onMenuSelect then
         self.menu:onMenuSelect(self.entry)
+        return true
+    end
+    return false
+end
+
+function KomgaListItem:onHoldSelect(arg, ges)
+    if self.menu and self.menu.onMenuHold then
+        self.menu:onMenuHold(self.entry)
         return true
     end
     return false
@@ -246,6 +264,10 @@ function KomgaListMenu:onMenuSelect(item)
     if item and item.callback then
         item.callback(item)
     end
+end
+
+function KomgaListMenu:onMenuHold(item)
+    -- Will be overridden or looked up in subclass/metatable
 end
 
 return KomgaListMenu

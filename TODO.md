@@ -13,7 +13,7 @@
 - [ ] Omit the series name from chapter/book names in the browser/reader list since it is already shown in the top title
 
 ## File Management and Downloading
-- [ ] Bulk download directly in the browser
+- [x] Bulk download directly in the browser
 - [ ] Add `.cover.jpg` (series cover image) to the downloaded series folder
 
 ## Catalog Filtering and Settings
