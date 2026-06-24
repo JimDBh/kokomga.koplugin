@@ -21,4 +21,3 @@
 
 ## Sync and Core Functionality
 - [x] Add functionality to match existing side-loaded files to Komga IDs via custom_metadata.lua fallbacks
-- [ ] `match_book` falls back to `content[1]` on no match — can return wrong book (false positive)
