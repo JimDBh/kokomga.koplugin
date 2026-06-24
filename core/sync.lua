@@ -89,100 +89,141 @@ function KomgaSync:matchCurrentBook()
     local ButtonDialog = require("ui/widget/buttondialog")
     local UIManager = require("ui/uimanager")
 
-    local buttons = {}
+    local total_books = #results.content
+    local page_size = 10
+    local total_pages = math.ceil(total_books / page_size)
+
     local dialog
-    for i = 1, #results.content do
-        local book = results.content[i]
-        local series = book.seriesTitle or book.seriesName or ""
-        local title = (book.metadata and book.metadata.title) or book.name or "Untitled"
-        local label = ""
-        if series ~= "" then
-            label = "[" .. series .. "] " .. title
-        else
-            label = title
+    local function showPage(page_num)
+        local start_idx = (page_num - 1) * page_size + 1
+        local end_idx = math.min(start_idx + page_size - 1, total_books)
+
+        local buttons = {}
+        for i = start_idx, end_idx do
+            local book = results.content[i]
+            local series = book.seriesTitle or book.seriesName or ""
+            local title = (book.metadata and book.metadata.title) or book.name or "Untitled"
+            local label = ""
+            if series ~= "" then
+                label = "[" .. series .. "] " .. title
+            else
+                label = title
+            end
+
+            table.insert(buttons, {
+                {
+                    text = label,
+                    callback = function()
+                        UIManager:close(dialog)
+                        self.plugin.settings.matched_books_cache[filepath] = book.id
+                        self.plugin:saveSettings()
+                        
+                        pcall(function()
+                            local DocSettings = require("docsettings")
+                            local custom_doc_settings = DocSettings.openSettingsFile and DocSettings.openSettingsFile(filepath)
+                            
+                            if custom_doc_settings then
+                                custom_doc_settings:saveSetting("komga_book_id", book.id)
+                                local custom_props = custom_doc_settings:readSetting("custom_props") or {}
+                                local doc_props = custom_doc_settings:readSetting("doc_props") or {}
+                                
+                                if type(book.metadata) == "table" then
+                                    if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
+                                        custom_props.title = book.metadata.title
+                                        doc_props.title = book.metadata.title
+                                    end
+                                    if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
+                                        custom_props.description = book.metadata.summary
+                                        doc_props.description = book.metadata.summary
+                                    end
+                                    if book.metadata.number ~= nil then
+                                        custom_props.series_index = tostring(book.metadata.number)
+                                        doc_props.series_index = tostring(book.metadata.number)
+                                    elseif book.metadata.numberSort ~= nil then
+                                        custom_props.series_index = tostring(book.metadata.numberSort)
+                                        doc_props.series_index = tostring(book.metadata.numberSort)
+                                    end
+                                    if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
+                                        local author_names = {}
+                                        for _, a in ipairs(book.metadata.authors) do
+                                            table.insert(author_names, a.name)
+                                        end
+                                        custom_props.authors = table.concat(author_names, ", ")
+                                        doc_props.authors = table.concat(author_names, ", ")
+                                    end
+                                end
+                                
+                                if book.seriesTitle and book.seriesTitle ~= "" then
+                                    custom_props.series = book.seriesTitle
+                                    doc_props.series = book.seriesTitle
+                                end
+                                
+                                if custom_doc_settings.flushCustomMetadata then
+                                    custom_doc_settings:saveSetting("custom_props", custom_props)
+                                    custom_doc_settings:saveSetting("doc_props", doc_props)
+                                    custom_doc_settings:flushCustomMetadata(filepath)
+                                else
+                                    custom_doc_settings:saveSetting("custom_props", custom_props)
+                                    custom_doc_settings:saveSetting("doc_props", doc_props)
+                                    if custom_doc_settings.flush then custom_doc_settings:flush() end
+                                end
+                            end
+                        end)
+                        
+                        self.plugin:notify(T(_("Matched with: %1"), label), "info")
+                    end
+                }
+            })
         end
 
-        table.insert(buttons, {
-            {
-                text = label,
+        -- Add navigation row if we have multiple pages
+        local nav_buttons = {}
+        if page_num > 1 then
+            table.insert(nav_buttons, {
+                text = "<< " .. _("Prev"),
                 callback = function()
                     UIManager:close(dialog)
-                    self.plugin.settings.matched_books_cache[filepath] = book.id
-                    self.plugin:saveSettings()
-                    
-                    pcall(function()
-                        local DocSettings = require("docsettings")
-                        local custom_doc_settings = DocSettings.openSettingsFile and DocSettings.openSettingsFile(filepath)
-                        
-                        if custom_doc_settings then
-                            custom_doc_settings:saveSetting("komga_book_id", book.id)
-                            local custom_props = custom_doc_settings:readSetting("custom_props") or {}
-                            local doc_props = custom_doc_settings:readSetting("doc_props") or {}
-                            
-                            if type(book.metadata) == "table" then
-                                if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
-                                    custom_props.title = book.metadata.title
-                                    doc_props.title = book.metadata.title
-                                end
-                                if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
-                                    custom_props.description = book.metadata.summary
-                                    doc_props.description = book.metadata.summary
-                                end
-                                if book.metadata.number ~= nil then
-                                    custom_props.series_index = tostring(book.metadata.number)
-                                    doc_props.series_index = tostring(book.metadata.number)
-                                elseif book.metadata.numberSort ~= nil then
-                                    custom_props.series_index = tostring(book.metadata.numberSort)
-                                    doc_props.series_index = tostring(book.metadata.numberSort)
-                                end
-                                if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
-                                    local author_names = {}
-                                    for _, a in ipairs(book.metadata.authors) do
-                                        table.insert(author_names, a.name)
-                                    end
-                                    custom_props.authors = table.concat(author_names, ", ")
-                                    doc_props.authors = table.concat(author_names, ", ")
-                                end
-                            end
-                            
-                            if book.seriesTitle and book.seriesTitle ~= "" then
-                                custom_props.series = book.seriesTitle
-                                doc_props.series = book.seriesTitle
-                            end
-                            
-                            if custom_doc_settings.flushCustomMetadata then
-                                custom_doc_settings:saveSetting("custom_props", custom_props)
-                                custom_doc_settings:saveSetting("doc_props", doc_props)
-                                custom_doc_settings:flushCustomMetadata(filepath)
-                            else
-                                custom_doc_settings:saveSetting("custom_props", custom_props)
-                                custom_doc_settings:saveSetting("doc_props", doc_props)
-                                if custom_doc_settings.flush then custom_doc_settings:flush() end
-                            end
-                        end
-                    end)
-                    
-                    self.plugin:notify(T(_("Matched with: %1"), label), "info")
+                    showPage(page_num - 1)
+                end
+            })
+        end
+        if page_num < total_pages then
+            table.insert(nav_buttons, {
+                text = _("Next") .. " >>",
+                callback = function()
+                    UIManager:close(dialog)
+                    showPage(page_num + 1)
+                end
+            })
+        end
+
+        if #nav_buttons > 0 then
+            table.insert(buttons, nav_buttons)
+        end
+
+        -- Add a Cancel button
+        table.insert(buttons, {
+            {
+                text = _("Cancel"),
+                callback = function()
+                    UIManager:close(dialog)
                 end
             }
         })
+
+        local title_text = _("Select Matching Komga Book")
+        if total_pages > 1 then
+            title_text = title_text .. " (" .. page_num .. "/" .. total_pages .. ")"
+        end
+
+        dialog = ButtonDialog:new{
+            title = title_text,
+            buttons = buttons
+        }
+        UIManager:show(dialog)
     end
 
-    -- Add a Cancel button
-    table.insert(buttons, {
-        {
-            text = _("Cancel"),
-            callback = function()
-                UIManager:close(dialog)
-            end
-        }
-    })
-
-    dialog = ButtonDialog:new{
-        title = _("Select Matching Komga Book"),
-        buttons = buttons
-    }
-    UIManager:show(dialog)
+    showPage(1)
 end
 
 -- Unlinks the current open book from Komga
