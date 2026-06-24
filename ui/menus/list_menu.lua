@@ -184,10 +184,79 @@ function KomgaListItem:init()
         bold = true,
     }
 
-    local text_group = VerticalGroup:new{
+    local subtitle_text = nil
+    if self.entry.cover_type == "book" or self.entry.book ~= nil then
+        local book = self.entry.book
+        if type(book) == "table" then
+            local vol_num
+            if type(book.metadata) == "table" then
+                if book.metadata.number ~= nil then
+                    vol_num = tostring(book.metadata.number)
+                elseif book.metadata.numberSort ~= nil then
+                    vol_num = tostring(book.metadata.numberSort)
+                end
+            end
+            
+            local author_str
+            if type(book.metadata) == "table" and type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
+                local names = {}
+                for _, a in ipairs(book.metadata.authors) do
+                    table.insert(names, a.name)
+                end
+                author_str = table.concat(names, ", ")
+            end
+            
+            local parts = {}
+            if vol_num and vol_num ~= "" then
+                table.insert(parts, _("Vol.") .. " " .. vol_num)
+            end
+            if author_str and author_str ~= "" then
+                table.insert(parts, _("By:") .. " " .. author_str)
+            end
+            if #parts > 0 then
+                subtitle_text = table.concat(parts, "  •  ")
+            end
+        end
+    elseif self.entry.cover_type == "series" or self.entry.series ~= nil then
+        local series = self.entry.series
+        if type(series) == "table" then
+            local b_count = series.booksCount or 0
+            local b_unread = series.booksUnreadCount or 0
+            local b_progress = series.booksInProgressCount or 0
+            
+            local s_parts = {}
+            table.insert(s_parts, _("Books:") .. " " .. tostring(b_count))
+            if b_unread > 0 then
+                table.insert(s_parts, _("Unread:") .. " " .. tostring(b_unread))
+            end
+            if b_progress > 0 then
+                table.insert(s_parts, _("In Progress:") .. " " .. tostring(b_progress))
+            end
+            if b_unread == 0 and b_progress == 0 and b_count > 0 then
+                table.insert(s_parts, _("Completed"))
+            end
+            if #s_parts > 0 then
+                subtitle_text = table.concat(s_parts, "  •  ")
+            end
+        end
+    end
+
+    local text_group_elements = {
         align = "left",
         title_widget,
     }
+    if subtitle_text and subtitle_text ~= "" then
+        local subtitle_face = Font:getFace("smallinfofont", 16)
+        local subtitle_widget = TextBoxWidget:new{
+            text = subtitle_text,
+            face = subtitle_face,
+            width = text_width,
+            alignment = "left",
+        }
+        table.insert(text_group_elements, VerticalSpan:new{ height = Screen:scaleBySize(4) })
+        table.insert(text_group_elements, subtitle_widget)
+    end
+    local text_group = VerticalGroup:new(text_group_elements)
     
     local row_elements = { align = "center" }
     if cover_widget then

@@ -500,6 +500,7 @@ function KomgaBrowser:showRecentSeries()
                 callback = function() self:showBooksInSeries(series.id, series.metadata and series.metadata.title or series.name) end,
                 cover_id = series.id,
                 cover_type = "series",
+                series = series,
             }
         end,
         cover_type = "series",
@@ -580,6 +581,7 @@ function KomgaBrowser:showAllSeries()
                 callback = function() self:showBooksInSeries(series.id, series.metadata and series.metadata.title or series.name) end,
                 cover_id = series.id,
                 cover_type = "series",
+                series = series,
             }
         end,
         cover_type = "series",
@@ -614,6 +616,7 @@ function KomgaBrowser:showSeriesInLibrary(library_id, library_name)
                 callback = function() self:showBooksInSeries(series.id, series.metadata and series.metadata.title or series.name) end,
                 cover_id = series.id,
                 cover_type = "series",
+                series = series,
             }
         end,
         cover_type = "series",
