@@ -144,13 +144,25 @@ function KomgaSync:matchCurrentBook()
 
     local filepath = doc.file
     local filename = filepath:match("([^/\\]+)$") or filepath
-    self.plugin:notify(T(_("Searching Komga for: %1"), filename), "info")
+    local parent_dir = filepath:match("([^/\\]+)[/\\][^/\\]+$") or ""
 
     -- Clean the name
-    local clean_name = filename:match("([^/\\]+)$") or filename
-    clean_name = clean_name:gsub("%.epub$", ""):gsub("%.pdf$", ""):gsub("%.cbz$", ""):gsub("%.cbr$", ""):gsub("%.fb2$", "")
+    local clean_name = filename:gsub("%.epub$", ""):gsub("%.pdf$", ""):gsub("%.cbz$", ""):gsub("%.cbr$", ""):gsub("%.fb2$", "")
 
-    local results, err = self.plugin.api:search_books(clean_name)
+    -- Formulate search query using parent directory/series name if available
+    local query = clean_name
+    if parent_dir ~= "" then
+        query = parent_dir .. " " .. clean_name
+    end
+
+    self.plugin:notify(T(_("Searching Komga for: %1"), query), "info")
+
+    local results, err = self.plugin.api:search_books(query)
+    -- Fallback 1: if search with parent_dir has no results, try searching with just clean_name
+    if (not results or not results.content or #results.content == 0) and parent_dir ~= "" then
+        results, err = self.plugin.api:search_books(clean_name)
+    end
+    -- Fallback 2: try replacing underscores/hyphens with spaces
     if not results or not results.content or #results.content == 0 then
         local fallback_name = clean_name:gsub("[%-_]", " ")
         results, err = self.plugin.api:search_books(fallback_name)
@@ -159,6 +171,18 @@ function KomgaSync:matchCurrentBook()
     if not results or not results.content or #results.content == 0 then
         self.plugin:notify(_("No matching book found on Komga server"), "error")
         return
+    end
+
+    -- Prioritize results where the series matches the parent directory
+    if parent_dir ~= "" then
+        local p_lower = parent_dir:lower()
+        table.sort(results.content, function(a, b)
+            local a_series = (a.seriesTitle or a.seriesName or ""):lower()
+            local b_series = (b.seriesTitle or b.seriesName or ""):lower()
+            local a_match = (a_series == p_lower or p_lower:find(a_series, 1, true) or a_series:find(p_lower, 1, true)) and 1 or 0
+            local b_match = (b_series == p_lower or p_lower:find(b_series, 1, true) or b_series:find(p_lower, 1, true)) and 1 or 0
+            return a_match > b_match
+        end)
     end
 
     local ButtonDialog = require("ui/widget/buttondialog")
