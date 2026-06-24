@@ -7,7 +7,8 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 ## [2.0.0] - 2026-06-24
 
 ### Added
-- Added support to manually match side-loaded books to Komga IDs with local fallback metadata support.
+- **Manual Book Matching & Side-loading**:
+  - Added support to manually match side-loaded books to Komga IDs with local fallback metadata support.
 - **Bulk Download in Browser**:
   - Selection gesture on book items (tap to toggle selection with checkmark overlays directly on cover images).
   - Contextual menu triggered by holding any book item to view download options (long-press is ignored for non-book entries).
