@@ -162,6 +162,12 @@ function KomgaMenu:createSettingsMenu()
                 self.plugin.sync:matchCurrentBook()
             end
         })
+        table.insert(submenu, {
+            text = _("Unlink Current Book"),
+            callback = function()
+                self.plugin.sync:unlinkCurrentBook()
+            end
+        })
     end
 
     table.insert(submenu, {

@@ -228,8 +228,7 @@ function KomgaAPI:match_book(filename, parent_dir)
             end
         end
         
-        -- 3. Defaut fallback to first closest match
-        return results.content[1]
+        -- No default fallback to avoid false positives
     end
     
     return nil, "No matching book found on Komga server"

@@ -110,7 +110,11 @@ local translations = {
         ["All %1 books in this list are already downloaded"] = "此列表中的所有 %1 本书籍均已下载",
         ["All %1 books on this page are already downloaded"] = "此页面上的所有 %1 本书籍均已下载",
         ["Bulk Download Options"] = "批量下载选项",
-        ["Generate"] = "生成"
+        ["Generate"] = "生成",
+        ["Unlink Current Book"] = "取消关联当前书籍",
+        ["Select Matching Komga Book"] = "选择匹配的 Komga 书籍",
+        ["Unlinked from Komga successfully."] = "成功取消关联 Komga 书籍。",
+        ["No matching book found on Komga server"] = "未在 Komga 服务器上找到匹配的书籍"
     }
 }
 

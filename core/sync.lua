@@ -136,11 +136,155 @@ end
 function KomgaSync:matchCurrentBook()
     local doc = require("apps/reader/modules/readermenu").document
     local _ = self.plugin.i18n._
+    local T = self.plugin.i18n.T
     if not doc or not doc.file then
         self.plugin:notify(_("No active book open to match."), "error")
         return
     end
-    self:autoMatchBook(doc.file, false)
+
+    local filepath = doc.file
+    local filename = filepath:match("([^/\\]+)$") or filepath
+    self.plugin:notify(T(_("Searching Komga for: %1"), filename), "info")
+
+    -- Clean the name
+    local clean_name = filename:match("([^/\\]+)$") or filename
+    clean_name = clean_name:gsub("%.epub$", ""):gsub("%.pdf$", ""):gsub("%.cbz$", ""):gsub("%.cbr$", ""):gsub("%.fb2$", "")
+
+    local results, err = self.plugin.api:search_books(clean_name)
+    if not results or not results.content or #results.content == 0 then
+        local fallback_name = clean_name:gsub("[%-_]", " ")
+        results, err = self.plugin.api:search_books(fallback_name)
+    end
+
+    if not results or not results.content or #results.content == 0 then
+        self.plugin:notify(_("No matching book found on Komga server"), "error")
+        return
+    end
+
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local UIManager = require("ui/uimanager")
+
+    local buttons = {}
+    local dialog
+    -- Take up to 10 matching books
+    local limit = math.min(#results.content, 10)
+    for i = 1, limit do
+        local book = results.content[i]
+        local series = book.seriesTitle or book.seriesName or ""
+        local title = (book.metadata and book.metadata.title) or book.name or "Untitled"
+        local label = ""
+        if series ~= "" then
+            label = "[" .. series .. "] " .. title
+        else
+            label = title
+        end
+
+        table.insert(buttons, {
+            {
+                text = label,
+                callback = function()
+                    UIManager:close(dialog)
+                    self.plugin.settings.matched_books_cache[filepath] = book.id
+                    self.plugin:saveSettings()
+                    
+                    pcall(function()
+                        local DocSettings = require("docsettings")
+                        local custom_doc_settings = DocSettings.openSettingsFile and DocSettings.openSettingsFile(filepath)
+                        
+                        if custom_doc_settings then
+                            custom_doc_settings:saveSetting("komga_book_id", book.id)
+                            local custom_props = custom_doc_settings:readSetting("custom_props") or {}
+                            local doc_props = custom_doc_settings:readSetting("doc_props") or {}
+                            
+                            if type(book.metadata) == "table" then
+                                if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
+                                    custom_props.title = book.metadata.title
+                                    doc_props.title = book.metadata.title
+                                end
+                                if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
+                                    custom_props.description = book.metadata.summary
+                                    doc_props.description = book.metadata.summary
+                                end
+                                if book.metadata.number ~= nil then
+                                    custom_props.series_index = tostring(book.metadata.number)
+                                    doc_props.series_index = tostring(book.metadata.number)
+                                elseif book.metadata.numberSort ~= nil then
+                                    custom_props.series_index = tostring(book.metadata.numberSort)
+                                    doc_props.series_index = tostring(book.metadata.numberSort)
+                                end
+                                if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
+                                    local author_names = {}
+                                    for _, a in ipairs(book.metadata.authors) do
+                                        table.insert(author_names, a.name)
+                                    end
+                                    custom_props.authors = table.concat(author_names, ", ")
+                                    doc_props.authors = table.concat(author_names, ", ")
+                                end
+                            end
+                            
+                            if book.seriesTitle and book.seriesTitle ~= "" then
+                                custom_props.series = book.seriesTitle
+                                doc_props.series = book.seriesTitle
+                            end
+                            
+                            if custom_doc_settings.flushCustomMetadata then
+                                custom_doc_settings:saveSetting("custom_props", custom_props)
+                                custom_doc_settings:saveSetting("doc_props", doc_props)
+                                custom_doc_settings:flushCustomMetadata(filepath)
+                            else
+                                custom_doc_settings:saveSetting("custom_props", custom_props)
+                                custom_doc_settings:saveSetting("doc_props", doc_props)
+                                if custom_doc_settings.flush then custom_doc_settings:flush() end
+                            end
+                        end
+                    end)
+                    
+                    self.plugin:notify(T(_("Matched with: %1"), label), "info")
+                end
+            }
+        })
+    end
+
+    -- Add a Cancel button
+    table.insert(buttons, {
+        {
+            text = _("Cancel"),
+            callback = function()
+                UIManager:close(dialog)
+            end
+        }
+    })
+
+    dialog = ButtonDialog:new{
+        title = _("Select Matching Komga Book"),
+        buttons = buttons
+    }
+    UIManager:show(dialog)
+end
+
+-- Unlinks the current open book from Komga
+function KomgaSync:unlinkCurrentBook()
+    local doc = require("apps/reader/modules/readermenu").document
+    local _ = self.plugin.i18n._
+    if not doc or not doc.file then
+        self.plugin:notify(_("No active book open to unlink."), "error")
+        return
+    end
+
+    local filepath = doc.file
+    self.plugin.settings.matched_books_cache[filepath] = nil
+    self.plugin:saveSettings()
+
+    pcall(function()
+        local DocSettings = require("docsettings")
+        local custom_doc_settings = DocSettings.openSettingsFile and DocSettings.openSettingsFile(filepath)
+        if custom_doc_settings then
+            custom_doc_settings:saveSetting("komga_book_id", nil)
+            if custom_doc_settings.flush then custom_doc_settings:flush() end
+        end
+    end)
+
+    self.plugin:notify(_("Unlinked from Komga successfully."), "info")
 end
 
 -- Sync progress from Komga
