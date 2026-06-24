@@ -5,6 +5,9 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 ## [Unreleased]
 
 ### Added
+- **Direct Sidecar & Fallback Metadata Support**:
+  - Implemented direct reading and writing to `custom_metadata.lua` files (located inside `.sdr` directory) as a highly reliable fallback for matching side-loaded books and series names.
+  - Consolidated duplicate metadata persistence paths between manual matching and book downloading into a clean, unified helper module.
 - **Bulk Download in Browser**:
   - Selection gesture on book items (tap to toggle selection with checkmark overlays directly on cover images).
   - Contextual menu triggered by holding any book item to view download options (long-press is ignored for non-book entries).

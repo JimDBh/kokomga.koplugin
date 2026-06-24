@@ -114,7 +114,10 @@ local translations = {
         ["Unlink Current Book"] = "取消关联当前书籍",
         ["Select Matching Komga Book"] = "选择匹配的 Komga 书籍",
         ["Unlinked from Komga successfully."] = "成功取消关联 Komga 书籍。",
-        ["No matching book found on Komga server"] = "未在 Komga 服务器上找到匹配的书籍"
+        ["No matching book found on Komga server"] = "未在 Komga 服务器上找到匹配的书籍",
+        ["Prev"] = "上一页",
+        ["Next"] = "下一页",
+        ["No active book open to unlink."] = "没有打开的活动书籍以取消关联。"
     }
 }
 

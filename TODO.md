@@ -20,5 +20,5 @@
 - [ ] Sort/Select what content to include in the browser
 
 ## Sync and Core Functionality
-- [ ] Add functionality to match existing side-loaded files to Komga IDs
+- [x] Add functionality to match existing side-loaded files to Komga IDs via custom_metadata.lua fallbacks
 - [ ] `match_book` falls back to `content[1]` on no match — can return wrong book (false positive)

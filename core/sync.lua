@@ -127,6 +127,73 @@ local function save_custom_metadata(filepath, key_or_table, value)
     end
 end
 
+-- Helper to save book metadata both to KOReader's docsettings and to custom_metadata.lua
+local function save_book_metadata(filepath, book, series_title)
+    if not filepath or not book then return end
+    
+    local DocSettings = require("docsettings")
+    local custom_doc_settings = DocSettings.openSettingsFile and DocSettings:openSettingsFile(filepath)
+    
+    local custom_props = {}
+    local doc_props = {}
+    if custom_doc_settings then
+        custom_props = custom_doc_settings:readSetting("custom_props") or {}
+        doc_props = custom_doc_settings:readSetting("doc_props") or {}
+    end
+    
+    if type(book.metadata) == "table" then
+        if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
+            custom_props.title = book.metadata.title
+            doc_props.title = book.metadata.title
+        end
+        if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
+            custom_props.description = book.metadata.summary
+            doc_props.description = book.metadata.summary
+        end
+        if book.metadata.number ~= nil then
+            custom_props.series_index = tostring(book.metadata.number)
+            doc_props.series_index = tostring(book.metadata.number)
+        elseif book.metadata.numberSort ~= nil then
+            custom_props.series_index = tostring(book.metadata.numberSort)
+            doc_props.series_index = tostring(book.metadata.numberSort)
+        end
+        if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
+            local author_names = {}
+            for _, a in ipairs(book.metadata.authors) do
+                table.insert(author_names, a.name)
+            end
+            custom_props.authors = table.concat(author_names, ", ")
+            doc_props.authors = table.concat(author_names, ", ")
+        end
+    end
+    
+    local s_title = series_title or book.seriesTitle
+    if s_title and s_title ~= "" then
+        custom_props.series = s_title
+        doc_props.series = s_title
+    end
+    
+    if custom_doc_settings then
+        custom_doc_settings:saveSetting("komga_book_id", book.id)
+        if custom_doc_settings.flushCustomMetadata then
+            custom_doc_settings:saveSetting("custom_props", custom_props)
+            custom_doc_settings:saveSetting("doc_props", doc_props)
+            custom_doc_settings:flushCustomMetadata(filepath)
+        else
+            custom_doc_settings:saveSetting("custom_props", custom_props)
+            custom_doc_settings:saveSetting("doc_props", doc_props)
+            if custom_doc_settings.flush then custom_doc_settings:flush() end
+        end
+    end
+    
+    -- Save directly to custom_metadata.lua for maximum reliability and direct fallback loading
+    save_custom_metadata(filepath, {
+        komga_book_id = book.id,
+        custom_props = custom_props,
+        doc_props = doc_props
+    })
+end
+
 -- Helper to find or cache book matching
 function KomgaSync:getOrMatchBook(filepath)
     if not self.plugin.api or not filepath then
@@ -393,68 +460,7 @@ function KomgaSync:matchCurrentBook()
                         self.plugin.settings.matched_books_cache[filepath] = book.id
                         self.plugin:saveSettings()
                         
-                        pcall(function()
-                            local DocSettings = require("docsettings")
-                            local custom_doc_settings = DocSettings.openSettingsFile and DocSettings:openSettingsFile(filepath)
-                            
-                            local custom_props = {}
-                            local doc_props = {}
-                            if custom_doc_settings then
-                                custom_props = custom_doc_settings:readSetting("custom_props") or {}
-                                doc_props = custom_doc_settings:readSetting("doc_props") or {}
-                            end
-                            
-                            if type(book.metadata) == "table" then
-                                if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
-                                    custom_props.title = book.metadata.title
-                                    doc_props.title = book.metadata.title
-                                end
-                                if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
-                                    custom_props.description = book.metadata.summary
-                                    doc_props.description = book.metadata.summary
-                                end
-                                if book.metadata.number ~= nil then
-                                    custom_props.series_index = tostring(book.metadata.number)
-                                    doc_props.series_index = tostring(book.metadata.number)
-                                elseif book.metadata.numberSort ~= nil then
-                                    custom_props.series_index = tostring(book.metadata.numberSort)
-                                    doc_props.series_index = tostring(book.metadata.numberSort)
-                                end
-                                if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
-                                    local author_names = {}
-                                    for _, a in ipairs(book.metadata.authors) do
-                                        table.insert(author_names, a.name)
-                                    end
-                                    custom_props.authors = table.concat(author_names, ", ")
-                                    doc_props.authors = table.concat(author_names, ", ")
-                                end
-                            end
-                            
-                            if book.seriesTitle and book.seriesTitle ~= "" then
-                                custom_props.series = book.seriesTitle
-                                doc_props.series = book.seriesTitle
-                            end
-                            
-                            if custom_doc_settings then
-                                custom_doc_settings:saveSetting("komga_book_id", book.id)
-                                if custom_doc_settings.flushCustomMetadata then
-                                    custom_doc_settings:saveSetting("custom_props", custom_props)
-                                    custom_doc_settings:saveSetting("doc_props", doc_props)
-                                    custom_doc_settings:flushCustomMetadata(filepath)
-                                else
-                                    custom_doc_settings:saveSetting("custom_props", custom_props)
-                                    custom_doc_settings:saveSetting("doc_props", doc_props)
-                                    if custom_doc_settings.flush then custom_doc_settings:flush() end
-                                end
-                            end
-                            
-                            -- Save directly to custom_metadata.lua for maximum reliability and direct fallback loading
-                            save_custom_metadata(filepath, {
-                                komga_book_id = book.id,
-                                custom_props = custom_props,
-                                doc_props = doc_props
-                            })
-                        end)
+                        pcall(save_book_metadata, filepath, book)
                         
                         self.plugin:notify(T(_("Matched with: %1"), label), "info")
                     end
@@ -743,95 +749,7 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
             self.plugin.settings.matched_books_cache[local_path] = book.id
             self.plugin:saveSettings()
             
-            pcall(function()
-                local DocSettings = require("docsettings")
-                local custom_doc_settings = DocSettings.openSettingsFile and DocSettings:openSettingsFile(local_path)
-                
-                if custom_doc_settings then
-                    custom_doc_settings:saveSetting("komga_book_id", book.id)
-                    local custom_props = custom_doc_settings:readSetting("custom_props") or {}
-                    local doc_props = custom_doc_settings:readSetting("doc_props") or {}
- 
-                    if type(book.metadata) == "table" then
-                        if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
-                            custom_props.title = book.metadata.title
-                            doc_props.title = book.metadata.title
-                        end
-                        if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
-                            custom_props.description = book.metadata.summary
-                            doc_props.description = book.metadata.summary
-                        end
-                        if book.metadata.number ~= nil then
-                            custom_props.series_index = tostring(book.metadata.number)
-                            doc_props.series_index = tostring(book.metadata.number)
-                        elseif book.metadata.numberSort ~= nil then
-                            custom_props.series_index = tostring(book.metadata.numberSort)
-                            doc_props.series_index = tostring(book.metadata.numberSort)
-                        end
-                        if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
-                            local author_names = {}
-                            for _, a in ipairs(book.metadata.authors) do
-                                table.insert(author_names, a.name)
-                            end
-                            custom_props.authors = table.concat(author_names, ", ")
-                            doc_props.authors = table.concat(author_names, ", ")
-                        end
-                    end
-                    
-                    if series_title and series_title ~= "" then
-                        custom_props.series = series_title
-                        doc_props.series = series_title
-                    end
-                    
-                    if custom_doc_settings.flushCustomMetadata then
-                        custom_doc_settings:saveSetting("custom_props", custom_props)
-                        custom_doc_settings:saveSetting("doc_props", doc_props)
-                        custom_doc_settings:flushCustomMetadata(local_path)
-                    else
-                        custom_doc_settings:saveSetting("custom_props", custom_props)
-                        custom_doc_settings:saveSetting("doc_props", doc_props)
-                        if custom_doc_settings.flush then custom_doc_settings:flush() end
-                    end
-                end
-                
-                -- Save directly to custom_metadata.lua for maximum reliability and direct fallback loading
-                pcall(function()
-                    local custom_props = {}
-                    local doc_props = {}
-                    if custom_doc_settings then
-                        custom_props = custom_doc_settings:readSetting("custom_props") or {}
-                        doc_props = custom_doc_settings:readSetting("doc_props") or {}
-                    end
-                    
-                    if type(book.metadata) == "table" then
-                        if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
-                            custom_props.title = book.metadata.title
-                            doc_props.title = book.metadata.title
-                        end
-                        if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
-                            custom_props.description = book.metadata.summary
-                            doc_props.description = book.metadata.summary
-                        end
-                        if book.metadata.number ~= nil then
-                            custom_props.series_index = tostring(book.metadata.number)
-                            doc_props.series_index = tostring(book.metadata.number)
-                        elseif book.metadata.numberSort ~= nil then
-                            custom_props.series_index = tostring(book.metadata.numberSort)
-                            doc_props.series_index = tostring(book.metadata.numberSort)
-                        end
-                    end
-                    
-                    if series_title and series_title ~= "" then
-                        custom_props.series = series_title
-                        doc_props.series = series_title
-                    end
-                    
-                    save_custom_metadata(local_path, {
-                        komga_book_id = book.id,
-                        custom_props = custom_props,
-                        doc_props = doc_props
-                    })
-                end)
+            pcall(save_book_metadata, local_path, book, series_title)
                 
                 -- Move file into place after sidecar metadata is fully written
                 local os = require("os")
