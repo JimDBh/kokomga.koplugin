@@ -4,6 +4,8 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-24
+
 ### Added
 - Added support to manually match side-loaded books to Komga IDs with local fallback metadata support.
 - **Bulk Download in Browser**:
