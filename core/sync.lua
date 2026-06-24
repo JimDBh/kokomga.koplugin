@@ -142,24 +142,11 @@ function KomgaSync:matchCurrentBook()
         end
     end
 
-    -- b. If there is a matched series, search filename in that series.
+    -- b. If there is a matched series, search filename in that series using the search API.
     if matched_series_id then
-        local series_books, s_err = self.plugin.api:get_books_for_series(matched_series_id, nil, 0, 1000)
-        if series_books and series_books.content and #series_books.content > 0 then
-            local filtered_content = {}
-            local f_lower = filename:lower()
-            for _, book in ipairs(series_books.content) do
-                local b_name = (book.name or ""):lower()
-                local b_title = (book.metadata and book.metadata.title or ""):lower()
-                if b_name == f_lower or b_title == f_lower or
-                   f_lower:find(b_name, 1, true) or b_name:find(f_lower, 1, true) or
-                   f_lower:find(b_title, 1, true) or b_title:find(f_lower, 1, true) then
-                    table.insert(filtered_content, book)
-                end
-            end
-            if #filtered_content > 0 then
-                results = { content = filtered_content }
-            end
+        local s_books, s_err = self.plugin.api:search_books(filename, matched_series_id)
+        if s_books and s_books.content and #s_books.content > 0 then
+            results = s_books
         end
     end
 

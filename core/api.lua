@@ -166,10 +166,13 @@ function KomgaAPI:get_libraries()
     return self:request("/api/v1/libraries")
 end
 
--- Search books by filename or metadata
-function KomgaAPI:search_books(filename)
-    local encoded_query = escape_uri(filename)
-    return self:request("/api/v1/books?search=" .. encoded_query)
+-- Search books by filename or metadata, optionally filtered by series_id
+function KomgaAPI:search_books(filename, series_id)
+    local query = "search=" .. escape_uri(filename)
+    if series_id then
+        query = query .. "&series_id=" .. escape_uri(series_id)
+    end
+    return self:request("/api/v1/books?" .. query)
 end
 
 -- Retrieve user progress for a book
