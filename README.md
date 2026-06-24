@@ -23,20 +23,10 @@ For detailed installation guides, configuration walk-throughs, troubleshooting, 
 
 *(Note: The screenshots below are for reference and may not exactly reflect the newest version)*
 
-* **Browser Grid View**
-
-  ![Browser Grid View](screenshots/browser_grid.png)
-
-* **Browser List View**
-
-  ![Browser List View](screenshots/browser_list.png)
-
-* **Setup & Settings**
-
-  ![Options & Setup](screenshots/options_screenshot.png)
-
-* **Auto-Download Next Chapter**
-
-  ![Auto-Download Next Chapter](screenshots/auto_download_next.png)
+| Browser Grid View | Browser List View |
+| :---: | :---: |
+| [![Browser Grid View](screenshots/browser_grid.png)](screenshots/browser_grid.png) | [![Browser List View](screenshots/browser_list.png)](screenshots/browser_list.png) |
+| **Setup & Settings** | **Auto-Download Next Chapter** |
+| [![Options & Setup](screenshots/options_screenshot.png)](screenshots/options_screenshot.png) | [![Auto-Download Next Chapter](screenshots/auto_download_next.png)](screenshots/auto_download_next.png) |
 
 
