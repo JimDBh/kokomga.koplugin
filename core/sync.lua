@@ -56,6 +56,30 @@ function KomgaSync:getOrMatchBook(filepath)
     return nil, "Not linked"
 end
 
+local function get_series_from_metadata(filepath, doc)
+    local DocSettings = require("docsettings")
+    local custom_doc_settings = DocSettings.openSettingsFile and pcall(DocSettings.openSettingsFile, DocSettings, filepath) and DocSettings.openSettingsFile(filepath) or nil
+    if custom_doc_settings then
+        local doc_props = custom_doc_settings:readSetting("doc_props") or {}
+        if doc_props.series and doc_props.series ~= "" then
+            return doc_props.series
+        end
+        local custom_props = custom_doc_settings:readSetting("custom_props") or {}
+        if custom_props.series and custom_props.series ~= "" then
+            return custom_props.series
+        end
+    end
+    if doc and doc.getProps then
+        local success, props = pcall(doc.getProps, doc)
+        if success and props then
+            if props.series and props.series ~= "" then
+                return props.series
+            end
+        end
+    end
+    return nil
+end
+
 -- Matches the current open book manual
 function KomgaSync:matchCurrentBook()
     local doc = self.plugin.ui and self.plugin.ui.document
@@ -69,16 +93,83 @@ function KomgaSync:matchCurrentBook()
     local filepath = doc.file
     local filename = filepath:match("([^/\\]+)$") or filepath
     local parent_dir = filepath:match("([^/\\]+)[/\\][^/\\]+$") or ""
-    self.plugin:notify(T(_("Searching Komga for: %1"), filename), "info")
+
+    local InfoMessage = require("ui/widget/infomessage")
+    local search_msg = InfoMessage:new{ text = "[Komga] " .. T(_("Searching Komga for: %1"), filename) }
+    UIManager:show(search_msg)
 
     local results, err
+    local matched_series_id = nil
+
+    -- a. First search the parent folder as the series
     if parent_dir ~= "" then
-        local combined_query = parent_dir .. " " .. filename
-        results, err = self.plugin.api:search_books(combined_query)
+        local s_results, s_err = self.plugin.api:search_series(parent_dir)
+        if s_results and s_results.content and #s_results.content > 0 then
+            local p_lower = parent_dir:lower()
+            for _, s in ipairs(s_results.content) do
+                local s_name = s.name or ""
+                local s_title = (s.metadata and s.metadata.title) or ""
+                if s_name:lower() == p_lower or s_title:lower() == p_lower then
+                    matched_series_id = s.id
+                    break
+                end
+            end
+            if not matched_series_id then
+                matched_series_id = s_results.content[1].id
+            end
+        end
     end
 
+    -- If not look at book metadata for series and search for series
+    if not matched_series_id then
+        local meta_series = get_series_from_metadata(filepath, doc)
+        if meta_series and meta_series ~= "" then
+            local s_results, s_err = self.plugin.api:search_series(meta_series)
+            if s_results and s_results.content and #s_results.content > 0 then
+                local ms_lower = meta_series:lower()
+                for _, s in ipairs(s_results.content) do
+                    local s_name = s.name or ""
+                    local s_title = (s.metadata and s.metadata.title) or ""
+                    if s_name:lower() == ms_lower or s_title:lower() == ms_lower then
+                        matched_series_id = s.id
+                        break
+                    end
+                end
+                if not matched_series_id then
+                    matched_series_id = s_results.content[1].id
+                end
+            end
+        end
+    end
+
+    -- b. If there is a matched series, search filename in that series.
+    if matched_series_id then
+        local series_books, s_err = self.plugin.api:get_books_for_series(matched_series_id, nil, 0, 1000)
+        if series_books and series_books.content and #series_books.content > 0 then
+            local filtered_content = {}
+            local f_lower = filename:lower()
+            for _, book in ipairs(series_books.content) do
+                local b_name = (book.name or ""):lower()
+                local b_title = (book.metadata and book.metadata.title or ""):lower()
+                if b_name == f_lower or b_title == f_lower or
+                   f_lower:find(b_name, 1, true) or b_name:find(f_lower, 1, true) or
+                   f_lower:find(b_title, 1, true) or b_title:find(f_lower, 1, true) then
+                    table.insert(filtered_content, book)
+                end
+            end
+            if #filtered_content > 0 then
+                results = { content = filtered_content }
+            end
+        end
+    end
+
+    -- c. If a / b failed, then we search the filename itself.
     if not results or not results.content or #results.content == 0 then
         results, err = self.plugin.api:search_books(filename)
+    end
+
+    if search_msg then
+        UIManager:close(search_msg)
     end
 
     if not results or not results.content or #results.content == 0 then

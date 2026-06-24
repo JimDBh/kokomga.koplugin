@@ -156,18 +156,30 @@ function KomgaMenu:createSettingsMenu()
     })
 
     if self.plugin.ui and self.plugin.ui.document then
-        table.insert(submenu, {
-            text = _("Manual Match Current Book"),
-            callback = function()
-                self.plugin.sync:matchCurrentBook()
+        local filepath = self.plugin.ui.document.file
+        local is_linked = false
+        if filepath then
+            local book_id = self.plugin.sync:getOrMatchBook(filepath)
+            if book_id then
+                is_linked = true
             end
-        })
-        table.insert(submenu, {
-            text = _("Unlink Current Book"),
-            callback = function()
-                self.plugin.sync:unlinkCurrentBook()
-            end
-        })
+        end
+
+        if not is_linked then
+            table.insert(submenu, {
+                text = _("Manual Match Current Book"),
+                callback = function()
+                    self.plugin.sync:matchCurrentBook()
+                end
+            })
+        else
+            table.insert(submenu, {
+                text = _("Unlink Current Book"),
+                callback = function()
+                    self.plugin.sync:unlinkCurrentBook()
+                end
+            })
+        end
     end
 
     table.insert(submenu, {

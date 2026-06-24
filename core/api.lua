@@ -203,6 +203,12 @@ function KomgaAPI:get_series(library_id, page, size)
     return self:request("/api/v1/series" .. q)
 end
 
+-- Search series by name or query
+function KomgaAPI:search_series(query)
+    local encoded_query = escape_uri(query)
+    return self:request("/api/v1/series?search=" .. encoded_query)
+end
+
 function KomgaAPI:get_books_for_series(series_id, filters, page, size)
     local encoded_id = escape_uri(series_id)
     local params = {}
