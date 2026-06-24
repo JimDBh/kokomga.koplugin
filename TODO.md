@@ -5,7 +5,6 @@
 - [ ] Display the active filter status in the top title bar using short indicators, light highlights, icons, or emojis
 
 ## Metadata and Status Display in Browser
-- [ ] Show more metadata in list view (e.g., authors, etc.) and optionally in grid view
 - [ ] For series, show a completion banner or text status indicating reading progress (e.g., "X/N books read")
 
 ## Catalog Filtering and Settings
