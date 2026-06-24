@@ -66,6 +66,7 @@ local translations = {
         ["Download '%1'?"] = "下载 '%1'?",
         ["Sync module not initialized"] = "同步模块未初始化",
         ["Searching Komga for: %1"] = "正在 Komga 中搜索：%1",
+        ["Manual Match Current Book"] = "手动匹配当前书籍",
         ["Matched with: %1"] = "已匹配：%1",
         ["Failed to match: %1"] = "匹配失败：%1",
         ["Checking server progress..."] = "正在检查服务器进度...",
