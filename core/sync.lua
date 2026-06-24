@@ -134,7 +134,7 @@ end
 
 -- Matches the current open book manual
 function KomgaSync:matchCurrentBook()
-    local doc = require("apps/reader/modules/readermenu").document
+    local doc = self.plugin.ui and self.plugin.ui.document
     local _ = self.plugin.i18n._
     local T = self.plugin.i18n.T
     if not doc or not doc.file then
@@ -264,7 +264,7 @@ end
 
 -- Unlinks the current open book from Komga
 function KomgaSync:unlinkCurrentBook()
-    local doc = require("apps/reader/modules/readermenu").document
+    local doc = self.plugin.ui and self.plugin.ui.document
     local _ = self.plugin.i18n._
     if not doc or not doc.file then
         self.plugin:notify(_("No active book open to unlink."), "error")
