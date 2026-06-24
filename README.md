@@ -1,35 +1,21 @@
 # KOReader Komga Client Plugin (kokomga)
 
-A KOReader plugin that connects to your Komga server. It provides a native library browser to check komga catalog and download, and keeps your reading progress synchronized. It also provides useful quality-of-life improvements like auto-next-chapter, auto RTL, etc.
+A KOReader plugin that connects to your Komga server. It provides a native library browser to check your Komga catalog, download books directly to your device, and keep your reading progress perfectly synchronized.
 
 ## Highlights
 
-1. **Browse Komga Catalog:** View libraries, series, recently added, and on-deck books with cover thumbnails, layout adjustments (list/grid modes), read status filters, and direct downloads.
-2. **Metadata Extraction:** Upon downloading, automatically retrieves comic and book metadata (title, summary, authors, series index) from the Komga server and populates KOReader's document settings.
-3. **Next Chapter Flow:** Prompts at the end of a book to check the server for the next chapter. If it is already downloaded, it opens it; if not, it automatically downloads and opens it.
-4. **Integrated Progress Sync:** Integrations into the default KOReader sync (`kosync`) to intercept get/update progress events and sync directly with the Komga server for matched books.
-5. **Auto RTL:** An option to automatically toggle reading direction to Right-to-Left (RTL) upon opening any book that are from Komga.
+* **Direct Catalog Browsing**: Explore your entire Komga server—including libraries, recently added, and on-deck books—with cover thumbnails, list or grid views, and read status filters.
+* **Hands-Free Syncing**: Keep your reading progress in perfect sync with your Komga server using KOReader's native sync integration.
+* **Smart Next-Chapter Transition**: When you turn the last page, the plugin can instantly open the next book if it's already on your device, or download and open it automatically over Wi-Fi.
+* **Automatic Book & Folder Metadata**: Downloads automatically fetch rich metadata (authors, summaries, and series indexes) and save folder cover art for file browser plugins.
+* **Bulk Downloads**: Easily queue multiple books or download all remaining unread books in a series directly from the browser view.
+* **Auto RTL for Manga**: Automatically sets your reading layout to Right-to-Left (RTL) when opening manga matched with your Komga server.
 
 ---
 
 ## Documentation
 
-For detailed installation guides, configuration walk-throughs, and feature deep-dives, please visit our [**GitHub Wiki**](https://github.com/JimDBh/kokomga.koplugin/wiki).
-
----
-
-## Installation
-Download and copy the `kokomga.koplugin` folder to the KOReader `plugins/` directory.
-
----
-
-## Configuration & Usage
-1. Open KOReader's top menu.
-2. Go to the **Search tab** (magnifying glass icon) -> **kokomga**.
-3. Open **Komga Browser**. If you have not configured it, you will be prompted:
-   * **Auto-Generate API Key:** Enter your Server URL, Username, and Password to auto generate the API key (credentials are not stored).
-   * **Manual Setup:** Manually type in your Server URL and API Key.
-4. Once connected, your books will synchronize progress in the background as you read, and you can download files directly from your catalog.
+For detailed installation guides, configuration walk-throughs, troubleshooting, and feature deep-dives, please visit our [**GitHub Wiki**](https://github.com/JimDBh/kokomga.koplugin/wiki).
 
 ---
 
