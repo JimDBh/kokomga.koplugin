@@ -12,6 +12,19 @@ A KOReader plugin that connects to your Komga server. It provides a native libra
 
 ---
 
+## Documentation & Wiki
+
+For detailed guides, configuration help, and deep-dives into the plugin's features, check out our **Wiki Pages**:
+
+* [**Wiki Home**](wiki/Home.md) — Comprehensive overview of the plugin's components and architecture.
+* [**Installation Guide**](wiki/Installation.md) — Step-by-step instructions to get the plugin up and running on any KOReader device.
+* [**Authentication & Server Setup**](wiki/Authentication.md) — How to securely connect KOReader with your Komga server (automatic API Key generation or manual setups).
+* [**Browser & Catalog UI**](wiki/Browser-UI.md) — Customizing list/grid views, pagination, and E-Ink status indicators.
+* [**Downloads & Bulk Actions**](wiki/Downloads-and-Bulk-Actions.md) — Custom download paths, automatic series cover art retrieval, metadata populating, and page-based bulk downloading.
+* [**Reading Progress Sync & Next Chapter**](wiki/Reading-Progress-Synchronization.md) — Real-time progress synchronization, `kosync` integration, offline caching, and end-of-book transitions.
+
+---
+
 ## Installation
 Download and copy the `kokomga.koplugin` folder to the KOReader `plugins/` directory.
 
