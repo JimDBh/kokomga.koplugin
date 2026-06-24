@@ -1,6 +1,6 @@
 # Reading Progress Synchronization
 
-Keeping your reading progress in sync between your portable reader and your Komga home server is a primary feature of `kokomga`. The plugin implements efficient progress transmission, intercepts KOReader’s native sync systems, and caches offline updates.
+`kokomga` synchronizes your reading state with your Komga server by intercepting KOReader’s native progress sync hooks, queuing offline updates, and pushing progress at regular page intervals.
 
 ---
 

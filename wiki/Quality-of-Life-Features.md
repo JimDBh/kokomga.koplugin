@@ -1,6 +1,6 @@
 # Quality of Life Features
 
-`kokomga` goes beyond basic synchronization by providing dedicated configuration options designed to enhance e-ink reading ergonomics, optimize network/battery usage, and keep the user interface running smoothly.
+Configuration options to enhance e-ink reading ergonomics, optimize network usage, and manage local cover image caching.
 
 ---
 

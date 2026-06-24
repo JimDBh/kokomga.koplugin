@@ -1,11 +1,9 @@
 # Installation Guide
 
-Setting up `kokomga` on your e-reader is straightforward. Since it is a native KOReader plugin, it operates cleanly alongside your other tools.
-
 ## Prerequisites
 
-* **KOReader**: Make sure you have KOReader installed on your device (Kobo, Kindle, PocketBook, Android, Linux, desktop, etc.).
-* **Komga Server**: A running Komga server accessible from your device's network.
+* **KOReader**: Installed on your device (Kobo, Kindle, PocketBook, Android, Linux, desktop, etc.).
+* **Komga Server**: Running and accessible from your device's network.
 
 ---
 

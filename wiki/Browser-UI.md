@@ -1,6 +1,6 @@
 # Browser & Catalog User Interface
 
-`kokomga` features a native, responsive e-ink friendly catalog browser. It maps directly onto KOReader's widget systems and adapts dynamically to your preferences.
+The plugin features an E-Ink optimized catalog browser mapped onto KOReader's native widget system.
 
 ---
 

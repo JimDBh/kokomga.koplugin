@@ -1,6 +1,6 @@
 # Downloads & Bulk Actions
 
-`kokomga` lets you download your books and comics directly from your Komga server. It automates file naming, folder layouts, metadata injection, and directory synchronization inside KOReader.
+The plugin automates file downloading, series organization, folder covers, and metadata populating inside KOReader.
 
 ---
 

@@ -1,6 +1,6 @@
 # Authentication & Server Setup
 
-To enable communication between KOReader and your Komga server, you must authenticate. `kokomga` supports two modes of setup: **Auto-Generate API Key** (recommended) and **Manual Setup**.
+To connect KOReader to your Komga server, configure the connection using either **Auto-Generate API Key** (recommended) or **Manual Setup**.
 
 ---
 

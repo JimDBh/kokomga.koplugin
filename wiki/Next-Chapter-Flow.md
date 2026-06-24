@@ -1,7 +1,5 @@
 # Next Chapter Flow
 
-To make reading series and episodic manga as seamless as possible, `kokomga` implements an automated end-of-book transition known as the **Next Chapter Flow**.
-
 ## How It Works
 
 When you reach the last page of a book or comic and attempt to turn the page, KOReader triggers an `onEndOfBook` event. `kokomga` intercepts this event and executes the following sequence:
