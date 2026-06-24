@@ -155,8 +155,7 @@ function KomgaMenu:createSettingsMenu()
         end
     })
 
-    local readermenu = package.loaded["apps/reader/modules/readermenu"] or pcall(require, "apps/reader/modules/readermenu") and require("apps/reader/modules/readermenu")
-    if readermenu and readermenu.document then
+    if self.plugin.ui and self.plugin.ui.document then
         table.insert(submenu, {
             text = _("Manual Match Current Book"),
             callback = function()
