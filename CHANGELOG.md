@@ -33,7 +33,7 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ---
 
-## [1.0.0] - 2026-06-23
+## [1.0.0] - 2026-06-21
 
 ### Added
 - **Authentication & Network Configuration**:
