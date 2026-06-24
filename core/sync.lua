@@ -13,6 +13,120 @@ function KomgaSync:new(plugin)
     return setmetatable(o, { __index = self })
 end
 
+-- Helper to get custom_metadata.lua file paths
+local function get_custom_metadata_paths(filepath)
+    -- Try replacing extension (e.g. .cbz -> .sdr)
+    local sdr_dir1 = filepath:gsub("%.%w+$", "") .. ".sdr"
+    local path1 = sdr_dir1 .. "/custom_metadata.lua"
+    
+    -- Try appending .sdr (e.g. .cbz -> .cbz.sdr)
+    local sdr_dir2 = filepath .. ".sdr"
+    local path2 = sdr_dir2 .. "/custom_metadata.lua"
+    
+    return path1, path2
+end
+
+-- Helper to recursively serialize Lua values to a string
+local function serialize_value(v, indent_level)
+    indent_level = indent_level or 1
+    local indent = string.rep("    ", indent_level)
+    if type(v) == "string" then
+        return string.format("%q", v)
+    elseif type(v) == "number" or type(v) == "boolean" then
+        return tostring(v)
+    elseif type(v) == "table" then
+        local parts = {}
+        table.insert(parts, "{\n")
+        for k2, v2 in pairs(v) do
+            local key_str
+            if type(k2) == "string" then
+                key_str = string.format("[%q]", k2)
+            else
+                key_str = string.format("[%s]", tostring(k2))
+            end
+            local val_str = serialize_value(v2, indent_level + 1)
+            if val_str then
+                table.insert(parts, string.format("%s    %s = %s,\n", indent, key_str, val_str))
+            end
+        end
+        table.insert(parts, indent .. "}")
+        return table.concat(parts)
+    else
+        return nil
+    end
+end
+
+-- Helper to load custom_metadata.lua table directly using standard Lua
+local function load_custom_metadata(filepath)
+    local path1, path2 = get_custom_metadata_paths(filepath)
+    for _, path in ipairs({path1, path2}) do
+        local f = io.open(path, "r")
+        if f then
+            f:close()
+            logger.info("[Komga Sync] Found custom_metadata.lua file at:", path)
+            local func, err = loadfile(path)
+            if func then
+                local ok, data = pcall(func)
+                if ok and type(data) == "table" then
+                    logger.info("[Komga Sync] Successfully loaded custom metadata table from:", path)
+                    for k, v in pairs(data) do
+                        logger.info("[Komga Sync] custom_metadata key:", tostring(k), "value_type:", type(v), "value:", tostring(v))
+                    end
+                    return data, path
+                else
+                    logger.warn("[Komga Sync] Failed to run custom metadata file:", tostring(err or data))
+                end
+            else
+                logger.warn("[Komga Sync] Failed to load custom metadata file:", tostring(err))
+            end
+        end
+    end
+    return nil
+end
+
+-- Helper to save a key-value pair to custom_metadata.lua
+local function save_custom_metadata(filepath, key_or_table, value)
+    local path1, _ = get_custom_metadata_paths(filepath)
+    local data = {}
+    local loaded_data, found_path = load_custom_metadata(filepath)
+    if loaded_data then
+        data = loaded_data
+        path1 = found_path or path1
+    end
+    
+    if type(key_or_table) == "table" then
+        for k, v in pairs(key_or_table) do
+            data[k] = v
+        end
+    else
+        data[key_or_table] = value
+    end
+    
+    local util = pcall(require, "util") and require("util")
+    if util and util.makePath then
+        local dir = path1:match("(.*)/[^/]+")
+        if dir then pcall(util.makePath, dir .. "/") end
+    end
+    
+    local f_write, err = io.open(path1, "w")
+    if f_write then
+        f_write:write("return {\n")
+        for k, v in pairs(data) do
+            local val_str = serialize_value(v, 1)
+            if val_str then
+                f_write:write(string.format("    [%q] = %s,\n", k, val_str))
+            end
+        end
+        f_write:write("}\n")
+        f_write:close()
+        logger.info("[Komga Sync] Successfully wrote custom_metadata to:", path1)
+        return true
+    else
+        logger.warn("[Komga Sync] Failed to open custom_metadata.lua for writing:", tostring(err))
+        return false
+    end
+end
+
 -- Helper to find or cache book matching
 function KomgaSync:getOrMatchBook(filepath)
     if not self.plugin.api or not filepath then
@@ -26,11 +140,38 @@ function KomgaSync:getOrMatchBook(filepath)
 
     -- Try reading from KOReader's document metadata (.sdr)
     local DocSettings = require("docsettings")
-    local custom_doc_settings = DocSettings.openSettingsFile and pcall(DocSettings.openSettingsFile, DocSettings, filepath) and DocSettings.openSettingsFile(filepath) or nil
+    logger.info("[Komga Sync] getOrMatchBook for filepath:", filepath)
+    logger.info("[Komga Sync] DocSettings module loaded. Type:", type(DocSettings))
+    logger.info("[Komga Sync] DocSettings.openSettingsFile exists:", type(DocSettings.openSettingsFile) == "function")
+
+    local custom_doc_settings = nil
+    if DocSettings.openSettingsFile then
+        local ok, res = pcall(DocSettings.openSettingsFile, DocSettings, filepath)
+        logger.info("[Komga Sync] pcall openSettingsFile ok:", ok, "result:", tostring(res))
+        if ok and res then
+            custom_doc_settings = res
+        end
+    end
     if custom_doc_settings then
         local meta_id = custom_doc_settings:readSetting("komga_book_id") 
             or custom_doc_settings:readSetting("komga_id")
+        logger.info("[Komga Sync] custom_doc_settings komga_book_id / komga_id:", tostring(meta_id))
         if meta_id and meta_id ~= "" then
+            logger.info("[Komga Sync] Matched via custom_doc_settings:", meta_id)
+            self.plugin.settings.matched_books_cache[filepath] = meta_id
+            self.plugin:saveSettings()
+            return meta_id
+        end
+    else
+        logger.info("[Komga Sync] No custom_doc_settings loaded.")
+    end
+
+    -- Fallback: Directly read custom_metadata.lua using standard Lua
+    local custom_metadata = load_custom_metadata(filepath)
+    if custom_metadata then
+        local meta_id = custom_metadata.komga_book_id or custom_metadata.komga_id
+        if meta_id and meta_id ~= "" then
+            logger.info("[Komga Sync] Matched via custom_metadata.lua table fallback:", meta_id)
             self.plugin.settings.matched_books_cache[filepath] = meta_id
             self.plugin:saveSettings()
             return meta_id
@@ -38,45 +179,101 @@ function KomgaSync:getOrMatchBook(filepath)
     end
 
     -- Skip sidecar creation if it doesn't already exist
-    local has_sidecar = DocSettings.hasSidecarFile and DocSettings:hasSidecarFile(filepath)
+    local has_sidecar = false
+    if DocSettings.hasSidecarFile then
+        local ok, res = pcall(DocSettings.hasSidecarFile, DocSettings, filepath)
+        logger.info("[Komga Sync] hasSidecarFile ok:", ok, "result:", tostring(res))
+        if ok then
+            has_sidecar = res
+        end
+    else
+        logger.info("[Komga Sync] DocSettings.hasSidecarFile does not exist.")
+    end
+    
     local doc_settings = nil
     if has_sidecar or not DocSettings.hasSidecarFile then
-        doc_settings = pcall(DocSettings.open, DocSettings, filepath) and DocSettings:open(filepath) or nil
+        local ok, res = pcall(DocSettings.open, DocSettings, filepath)
+        logger.info("[Komga Sync] pcall open ok:", ok, "result:", tostring(res))
+        if ok and res then
+            doc_settings = res
+        end
     end
     if doc_settings then
         local meta_id = doc_settings:readSetting("komga_book_id") 
             or doc_settings:readSetting("komga_id") 
+        logger.info("[Komga Sync] doc_settings komga_book_id / komga_id:", tostring(meta_id))
         if meta_id and meta_id ~= "" then
+            logger.info("[Komga Sync] Matched via doc_settings:", meta_id)
             self.plugin.settings.matched_books_cache[filepath] = meta_id
             self.plugin:saveSettings()
             return meta_id
         end
+    else
+        logger.info("[Komga Sync] No doc_settings loaded.")
     end
     
+    logger.info("[Komga Sync] getOrMatchBook returning nil (Not linked)")
     return nil, "Not linked"
 end
 
 local function get_series_from_metadata(filepath, doc)
     local DocSettings = require("docsettings")
-    local custom_doc_settings = DocSettings.openSettingsFile and pcall(DocSettings.openSettingsFile, DocSettings, filepath) and DocSettings.openSettingsFile(filepath) or nil
+    logger.info("[Komga Sync] get_series_from_metadata for filepath:", filepath)
+    logger.info("[Komga Sync] DocSettings.openSettingsFile exists:", type(DocSettings.openSettingsFile) == "function")
+
+    local custom_doc_settings = nil
+    if DocSettings.openSettingsFile then
+        local ok, res = pcall(DocSettings.openSettingsFile, DocSettings, filepath)
+        logger.info("[Komga Sync] get_series_from_metadata pcall openSettingsFile ok:", ok, "result:", tostring(res))
+        if ok and res then
+            custom_doc_settings = res
+        end
+    end
     if custom_doc_settings then
         local doc_props = custom_doc_settings:readSetting("doc_props") or {}
+        logger.info("[Komga Sync] doc_props series:", tostring(doc_props.series))
         if doc_props.series and doc_props.series ~= "" then
             return doc_props.series
         end
         local custom_props = custom_doc_settings:readSetting("custom_props") or {}
+        logger.info("[Komga Sync] custom_props series:", tostring(custom_props.series))
         if custom_props.series and custom_props.series ~= "" then
             return custom_props.series
         end
+    else
+        logger.info("[Komga Sync] No custom_doc_settings loaded for series retrieval.")
     end
+
+    -- Direct load custom_metadata.lua fallback for series metadata
+    local custom_metadata = load_custom_metadata(filepath)
+    if custom_metadata then
+        if custom_metadata.series and custom_metadata.series ~= "" then
+            logger.info("[Komga Sync] Found series in custom_metadata table:", tostring(custom_metadata.series))
+            return custom_metadata.series
+        end
+        local doc_props = custom_metadata.doc_props or {}
+        if doc_props.series and doc_props.series ~= "" then
+            logger.info("[Komga Sync] Found series in custom_metadata.doc_props table:", tostring(doc_props.series))
+            return doc_props.series
+        end
+        local custom_props = custom_metadata.custom_props or {}
+        if custom_props.series and custom_props.series ~= "" then
+            logger.info("[Komga Sync] Found series in custom_metadata.custom_props table:", tostring(custom_props.series))
+            return custom_props.series
+        end
+    end
+
     if doc and doc.getProps then
         local success, props = pcall(doc.getProps, doc)
+        logger.info("[Komga Sync] getProps ok:", success)
         if success and props then
+            logger.info("[Komga Sync] props.series:", tostring(props.series))
             if props.series and props.series ~= "" then
                 return props.series
             end
         end
     end
+    logger.info("[Komga Sync] get_series_from_metadata returning nil")
     return nil
 end
 
@@ -198,44 +395,48 @@ function KomgaSync:matchCurrentBook()
                         
                         pcall(function()
                             local DocSettings = require("docsettings")
-                            local custom_doc_settings = DocSettings.openSettingsFile and DocSettings.openSettingsFile(filepath)
+                            local custom_doc_settings = DocSettings.openSettingsFile and DocSettings:openSettingsFile(filepath)
+                            
+                            local custom_props = {}
+                            local doc_props = {}
+                            if custom_doc_settings then
+                                custom_props = custom_doc_settings:readSetting("custom_props") or {}
+                                doc_props = custom_doc_settings:readSetting("doc_props") or {}
+                            end
+                            
+                            if type(book.metadata) == "table" then
+                                if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
+                                    custom_props.title = book.metadata.title
+                                    doc_props.title = book.metadata.title
+                                end
+                                if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
+                                    custom_props.description = book.metadata.summary
+                                    doc_props.description = book.metadata.summary
+                                end
+                                if book.metadata.number ~= nil then
+                                    custom_props.series_index = tostring(book.metadata.number)
+                                    doc_props.series_index = tostring(book.metadata.number)
+                                elseif book.metadata.numberSort ~= nil then
+                                    custom_props.series_index = tostring(book.metadata.numberSort)
+                                    doc_props.series_index = tostring(book.metadata.numberSort)
+                                end
+                                if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
+                                    local author_names = {}
+                                    for _, a in ipairs(book.metadata.authors) do
+                                        table.insert(author_names, a.name)
+                                    end
+                                    custom_props.authors = table.concat(author_names, ", ")
+                                    doc_props.authors = table.concat(author_names, ", ")
+                                end
+                            end
+                            
+                            if book.seriesTitle and book.seriesTitle ~= "" then
+                                custom_props.series = book.seriesTitle
+                                doc_props.series = book.seriesTitle
+                            end
                             
                             if custom_doc_settings then
                                 custom_doc_settings:saveSetting("komga_book_id", book.id)
-                                local custom_props = custom_doc_settings:readSetting("custom_props") or {}
-                                local doc_props = custom_doc_settings:readSetting("doc_props") or {}
-                                
-                                if type(book.metadata) == "table" then
-                                    if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
-                                        custom_props.title = book.metadata.title
-                                        doc_props.title = book.metadata.title
-                                    end
-                                    if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
-                                        custom_props.description = book.metadata.summary
-                                        doc_props.description = book.metadata.summary
-                                    end
-                                    if book.metadata.number ~= nil then
-                                        custom_props.series_index = tostring(book.metadata.number)
-                                        doc_props.series_index = tostring(book.metadata.number)
-                                    elseif book.metadata.numberSort ~= nil then
-                                        custom_props.series_index = tostring(book.metadata.numberSort)
-                                        doc_props.series_index = tostring(book.metadata.numberSort)
-                                    end
-                                    if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
-                                        local author_names = {}
-                                        for _, a in ipairs(book.metadata.authors) do
-                                            table.insert(author_names, a.name)
-                                        end
-                                        custom_props.authors = table.concat(author_names, ", ")
-                                        doc_props.authors = table.concat(author_names, ", ")
-                                    end
-                                end
-                                
-                                if book.seriesTitle and book.seriesTitle ~= "" then
-                                    custom_props.series = book.seriesTitle
-                                    doc_props.series = book.seriesTitle
-                                end
-                                
                                 if custom_doc_settings.flushCustomMetadata then
                                     custom_doc_settings:saveSetting("custom_props", custom_props)
                                     custom_doc_settings:saveSetting("doc_props", doc_props)
@@ -246,6 +447,13 @@ function KomgaSync:matchCurrentBook()
                                     if custom_doc_settings.flush then custom_doc_settings:flush() end
                                 end
                             end
+                            
+                            -- Save directly to custom_metadata.lua for maximum reliability and direct fallback loading
+                            save_custom_metadata(filepath, {
+                                komga_book_id = book.id,
+                                custom_props = custom_props,
+                                doc_props = doc_props
+                            })
                         end)
                         
                         self.plugin:notify(T(_("Matched with: %1"), label), "info")
@@ -319,11 +527,12 @@ function KomgaSync:unlinkCurrentBook()
 
     pcall(function()
         local DocSettings = require("docsettings")
-        local custom_doc_settings = DocSettings.openSettingsFile and DocSettings.openSettingsFile(filepath)
+        local custom_doc_settings = DocSettings.openSettingsFile and DocSettings:openSettingsFile(filepath)
         if custom_doc_settings then
             custom_doc_settings:saveSetting("komga_book_id", nil)
             if custom_doc_settings.flush then custom_doc_settings:flush() end
         end
+        save_custom_metadata(filepath, "komga_book_id", nil)
     end)
 
     self.plugin:notify(_("Unlinked from Komga successfully."), "info")
@@ -536,7 +745,7 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
             
             pcall(function()
                 local DocSettings = require("docsettings")
-                local custom_doc_settings = DocSettings.openSettingsFile and DocSettings.openSettingsFile(local_path)
+                local custom_doc_settings = DocSettings.openSettingsFile and DocSettings:openSettingsFile(local_path)
                 
                 if custom_doc_settings then
                     custom_doc_settings:saveSetting("komga_book_id", book.id)
@@ -584,6 +793,45 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
                         if custom_doc_settings.flush then custom_doc_settings:flush() end
                     end
                 end
+                
+                -- Save directly to custom_metadata.lua for maximum reliability and direct fallback loading
+                pcall(function()
+                    local custom_props = {}
+                    local doc_props = {}
+                    if custom_doc_settings then
+                        custom_props = custom_doc_settings:readSetting("custom_props") or {}
+                        doc_props = custom_doc_settings:readSetting("doc_props") or {}
+                    end
+                    
+                    if type(book.metadata) == "table" then
+                        if type(book.metadata.title) == "string" and book.metadata.title ~= "" then
+                            custom_props.title = book.metadata.title
+                            doc_props.title = book.metadata.title
+                        end
+                        if type(book.metadata.summary) == "string" and book.metadata.summary ~= "" then
+                            custom_props.description = book.metadata.summary
+                            doc_props.description = book.metadata.summary
+                        end
+                        if book.metadata.number ~= nil then
+                            custom_props.series_index = tostring(book.metadata.number)
+                            doc_props.series_index = tostring(book.metadata.number)
+                        elseif book.metadata.numberSort ~= nil then
+                            custom_props.series_index = tostring(book.metadata.numberSort)
+                            doc_props.series_index = tostring(book.metadata.numberSort)
+                        end
+                    end
+                    
+                    if series_title and series_title ~= "" then
+                        custom_props.series = series_title
+                        doc_props.series = series_title
+                    end
+                    
+                    save_custom_metadata(local_path, {
+                        komga_book_id = book.id,
+                        custom_props = custom_props,
+                        doc_props = doc_props
+                    })
+                end)
                 
                 -- Move file into place after sidecar metadata is fully written
                 local os = require("os")
