@@ -847,11 +847,20 @@ function KomgaBrowser:onMenuHold(entry)
         end
     end
     
-    -- Option 3: "Download all books"
+    -- Option 3: "Download all books on this page"
     local all_books = {}
     if self.item_table then
-        for _, item in ipairs(self.item_table) do
-            if item.cover_type == "book" and item.book then
+        local start_idx = 1
+        local end_idx = #self.item_table
+        if self._pagination then
+            local p = self._pagination
+            local page_num = self.page or 1
+            start_idx = math.max(1, (page_num - 1) * p.page_size + 1)
+            end_idx = math.min(#self.item_table, page_num * p.page_size)
+        end
+        for i = start_idx, end_idx do
+            local item = self.item_table[i]
+            if item and item.cover_type == "book" and item.book then
                 table.insert(all_books, item.book)
             end
         end
@@ -871,9 +880,9 @@ function KomgaBrowser:onMenuHold(entry)
         if #all_to_download > 0 then
             local text
             if all_already_downloaded_count > 0 then
-                text = T(_("Download remaining %1 books"), #all_to_download)
+                text = T(_("Download remaining %1 books on this page"), #all_to_download)
             else
-                text = T(_("Download all %1 books in this list"), #all_to_download)
+                text = T(_("Download all %1 books on this page"), #all_to_download)
             end
             table.insert(buttons, { {
                 text = text,
@@ -889,7 +898,7 @@ function KomgaBrowser:onMenuHold(entry)
             } })
         else
             table.insert(buttons, { {
-                text = T(_("All %1 books in this list are already downloaded"), #all_books),
+                text = T(_("All %1 books on this page are already downloaded"), #all_books),
                 callback = function()
                     UIManager:close(dialog)
                 end,

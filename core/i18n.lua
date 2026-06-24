@@ -103,8 +103,11 @@ local translations = {
         ["All %1 selected books are already downloaded"] = "所有 %1 本选中书籍均已下载",
         ["Download remaining %1 books"] = "下载剩余的 %1 本书籍",
         ["Download all %1 books in this list"] = "下载此列表中的所有 %1 本书籍",
+        ["Download remaining %1 books on this page"] = "下载此页面上剩余的 %1 本书籍",
+        ["Download all %1 books on this page"] = "下载此页面上的所有 %1 本书籍",
         ["All downloads finished!"] = "所有下载已完成！",
         ["All %1 books in this list are already downloaded"] = "此列表中的所有 %1 本书籍均已下载",
+        ["All %1 books on this page are already downloaded"] = "此页面上的所有 %1 本书籍均已下载",
         ["Bulk Download Options"] = "批量下载选项",
         ["Generate"] = "生成"
     }
