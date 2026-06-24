@@ -17,6 +17,9 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
   - Retained the series name prefix in multi-series lists (e.g. "Keep Reading", "On Deck", "Recently Added Books") for proper context.
 - **Series Cover Image Download**:
   - Automatically downloads the series cover art (`.cover.<ext>`) to the series subdirectory on successful book download if no series cover is present, enabling folder-level cover previews in KOReader's coverbrowser.
+- **Improved List Mode UI Layout**:
+  - Made the list-mode separator lines significantly more distinct by changing the color to a darker mid-gray (`COLOR_GRAY`) and dynamically scaling the line height (`delimiter_h`) based on the device's screen scale factor.
+  - Added wider, more balanced horizontal padding (left and right) on list view rows to give them elegant margins and breathe better on a wider variety of display devices.
 
 ### Fixed
 - **Memory Safety & Mutex Crash Prevention**:

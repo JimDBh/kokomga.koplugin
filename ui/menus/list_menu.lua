@@ -23,8 +23,9 @@ local Screen = require("device").screen
 
 local LIST_LAYOUT = {
     padding_v = Screen:scaleBySize(2),
-    padding_h = Screen:scaleBySize(15),
+    padding_h = Screen:scaleBySize(24),
     cover_text_gap = Screen:scaleBySize(10),
+    delimiter_h = math.max(1, Screen:scaleBySize(1)),
 }
 
 local KomgaListItem = InputContainer:extend{
@@ -67,7 +68,7 @@ function KomgaListItem:init()
         
         -- Top/bottom padding
         local v_padding = LIST_LAYOUT.padding_v * 2
-        local cover_h = self.height - v_padding - 1 -- -1 for border adjustment
+        local cover_h = self.height - v_padding - LIST_LAYOUT.delimiter_h -- Adjust for delimiter height
         if cover_h < 10 then cover_h = 10 end
         local cover_w = math.floor(cover_h * 2 / 3)
         
@@ -197,7 +198,7 @@ function KomgaListItem:init()
 
     local content_frame = FrameContainer:new{
         width = self.width,
-        height = self.height - 1,
+        height = self.height - LIST_LAYOUT.delimiter_h,
         padding_top = LIST_LAYOUT.padding_v,
         padding_bottom = LIST_LAYOUT.padding_v,
         padding_left = LIST_LAYOUT.padding_h,
@@ -206,14 +207,14 @@ function KomgaListItem:init()
         bordersize = 0,
         background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{
-            dimen = Geom:new{ w = self.width - (LIST_LAYOUT.padding_h * 2), h = self.height - 1 - (LIST_LAYOUT.padding_v * 2) },
+            dimen = Geom:new{ w = self.width - (LIST_LAYOUT.padding_h * 2), h = self.height - LIST_LAYOUT.delimiter_h - (LIST_LAYOUT.padding_v * 2) },
             HorizontalGroup:new(row_elements)
         }
     }
 
     local delimiter = LineWidget:new{
-        dimen = Geom:new{ w = self.width, h = 1 },
-        background = Blitbuffer.COLOR_LIGHT_GRAY,
+        dimen = Geom:new{ w = self.width, h = LIST_LAYOUT.delimiter_h },
+        background = Blitbuffer.COLOR_GRAY,
     }
 
     self[1] = VerticalGroup:new{
@@ -309,8 +310,8 @@ function KomgaListMenu:updateItems(select_number)
 
     -- Add a top delimiter before the first item
     table.insert(self.item_group, LineWidget:new{
-        dimen = Geom:new{ w = self.item_width, h = 1 },
-        background = Blitbuffer.COLOR_LIGHT_GRAY,
+        dimen = Geom:new{ w = self.item_width, h = LIST_LAYOUT.delimiter_h },
+        background = Blitbuffer.COLOR_GRAY,
     })
 
     for row = 1, rows_per_page do
