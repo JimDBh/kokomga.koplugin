@@ -750,36 +750,35 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
             self.plugin:saveSettings()
             
             pcall(save_book_metadata, local_path, book, series_title)
-                
-                -- Move file into place after sidecar metadata is fully written
-                local os = require("os")
-                os.rename(tmp_path, local_path)
-                
-                -- Download series cover if missing and downloading to a subdir
-                self:downloadSeriesCoverIfMissing(book, final_dir, series_title)
-                
-                if on_success_callback then
-                    UIManager:nextTick(function()
-                        on_success_callback(local_path)
-                    end)
-                end
-                
-                -- Tell FileBrowser to refresh directory and reload file items
+            
+            -- Move file into place after sidecar metadata is fully written
+            local os = require("os")
+            os.rename(tmp_path, local_path)
+            
+            -- Download series cover if missing and downloading to a subdir
+            self:downloadSeriesCoverIfMissing(book, final_dir, series_title)
+            
+            if on_success_callback then
                 UIManager:nextTick(function()
-                    pcall(function()
-                        local BookInfoManager = require("plugins/coverbrowser.koplugin/bookinfomanager")
-                        if BookInfoManager and BookInfoManager.deleteBookInfo then
-                            BookInfoManager:deleteBookInfo(local_path)
-                        end
-                    end)
-                    local ok, FileManager = pcall(require, "apps/filemanager/filemanager")
-                    if ok and FileManager.instance then
-                        if FileManager.instance.file_chooser and FileManager.instance.file_chooser.resetBookInfoCache then
-                            pcall(function() FileManager.instance.file_chooser.resetBookInfoCache(local_path) end)
-                        end
-                        FileManager.instance:onRefresh()
+                    on_success_callback(local_path)
+                end)
+            end
+            
+            -- Tell FileBrowser to refresh directory and reload file items
+            UIManager:nextTick(function()
+                pcall(function()
+                    local BookInfoManager = require("plugins/coverbrowser.koplugin/bookinfomanager")
+                    if BookInfoManager and BookInfoManager.deleteBookInfo then
+                        BookInfoManager:deleteBookInfo(local_path)
                     end
                 end)
+                local ok, FileManager = pcall(require, "apps/filemanager/filemanager")
+                if ok and FileManager.instance then
+                    if FileManager.instance.file_chooser and FileManager.instance.file_chooser.resetBookInfoCache then
+                        pcall(function() FileManager.instance.file_chooser.resetBookInfoCache(local_path) end)
+                    end
+                    FileManager.instance:onRefresh()
+                end
             end)
         else
             logger.err("KomgaSync: Download failed", tostring(err))
