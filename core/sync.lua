@@ -13,82 +13,6 @@ function KomgaSync:new(plugin)
     return setmetatable(o, { __index = self })
 end
 
-function KomgaSync:autoMatchBook(filepath, silent)
-    if not self.plugin.api or not filepath then return nil end
-    local filename = filepath:match("([^/\\]+)$") or filepath
-    local parent_dir = filepath:match("([^/\\]+)[/\\][^/\\]+$") or ""
-    local _ = self.plugin.i18n._
-    local T = self.plugin.i18n.T
-    
-    if not silent then self.plugin:notify(T(_("Searching Komga for: %1"), filename), "info") end
-    local matched, err = self.plugin.api:match_book(filename, parent_dir)
-    
-    if matched then
-        self.plugin.settings.matched_books_cache[filepath] = matched.id
-        self.plugin:saveSettings()
-        
-        pcall(function()
-            local DocSettings = require("docsettings")
-            local custom_doc_settings = DocSettings.openSettingsFile and DocSettings.openSettingsFile(filepath)
-            
-            if custom_doc_settings then
-                custom_doc_settings:saveSetting("komga_book_id", matched.id)
-                local custom_props = custom_doc_settings:readSetting("custom_props") or {}
-                local doc_props = custom_doc_settings:readSetting("doc_props") or {}
-                
-                if type(matched.metadata) == "table" then
-                    if type(matched.metadata.title) == "string" and matched.metadata.title ~= "" then
-                        custom_props.title = matched.metadata.title
-                        doc_props.title = matched.metadata.title
-                    end
-                    if type(matched.metadata.summary) == "string" and matched.metadata.summary ~= "" then
-                        custom_props.description = matched.metadata.summary
-                        doc_props.description = matched.metadata.summary
-                    end
-                    if matched.metadata.number ~= nil then
-                        custom_props.series_index = tostring(matched.metadata.number)
-                        doc_props.series_index = tostring(matched.metadata.number)
-                    elseif matched.metadata.numberSort ~= nil then
-                        custom_props.series_index = tostring(matched.metadata.numberSort)
-                        doc_props.series_index = tostring(matched.metadata.numberSort)
-                    end
-                    if type(matched.metadata.authors) == "table" and #matched.metadata.authors > 0 then
-                        local author_names = {}
-                        for _, a in ipairs(matched.metadata.authors) do
-                            table.insert(author_names, a.name)
-                        end
-                        custom_props.authors = table.concat(author_names, ", ")
-                        doc_props.authors = table.concat(author_names, ", ")
-                    end
-                end
-                
-                if matched.seriesTitle and matched.seriesTitle ~= "" then
-                    custom_props.series = matched.seriesTitle
-                    doc_props.series = matched.seriesTitle
-                end
-                
-                if custom_doc_settings.flushCustomMetadata then
-                    -- doc_props in custom settings uses internal schema maybe? but others plugins use doc_props. Let's merge directly.
-                    -- KORComic uses doc_props
-                    custom_doc_settings:saveSetting("custom_props", custom_props)
-                    custom_doc_settings:saveSetting("doc_props", doc_props)
-                    custom_doc_settings:flushCustomMetadata(filepath)
-                else
-                    custom_doc_settings:saveSetting("custom_props", custom_props)
-                    custom_doc_settings:saveSetting("doc_props", doc_props)
-                    if custom_doc_settings.flush then custom_doc_settings:flush() end
-                end
-            end
-        end)
-        
-        if not silent then self.plugin:notify(T(_("Matched with: %1"), matched.name), "info") end
-        return matched.id
-    else
-        if not silent then self.plugin:notify(T(_("Failed to match: %1"), tostring(err)), "error") end
-    end
-    return nil
-end
-
 -- Helper to find or cache book matching
 function KomgaSync:getOrMatchBook(filepath)
     if not self.plugin.api or not filepath then
@@ -145,27 +69,16 @@ function KomgaSync:matchCurrentBook()
     local filepath = doc.file
     local filename = filepath:match("([^/\\]+)$") or filepath
     local parent_dir = filepath:match("([^/\\]+)[/\\][^/\\]+$") or ""
+    self.plugin:notify(T(_("Searching Komga for: %1"), filename), "info")
 
-    -- Clean the name
-    local clean_name = filename:gsub("%.epub$", ""):gsub("%.pdf$", ""):gsub("%.cbz$", ""):gsub("%.cbr$", ""):gsub("%.fb2$", "")
-
-    -- Formulate search query using parent directory/series name if available
-    local query = clean_name
+    local results, err
     if parent_dir ~= "" then
-        query = parent_dir .. " " .. clean_name
+        local combined_query = parent_dir .. " " .. filename
+        results, err = self.plugin.api:search_books(combined_query)
     end
 
-    self.plugin:notify(T(_("Searching Komga for: %1"), query), "info")
-
-    local results, err = self.plugin.api:search_books(query)
-    -- Fallback 1: if search with parent_dir has no results, try searching with just clean_name
-    if (not results or not results.content or #results.content == 0) and parent_dir ~= "" then
-        results, err = self.plugin.api:search_books(clean_name)
-    end
-    -- Fallback 2: try replacing underscores/hyphens with spaces
     if not results or not results.content or #results.content == 0 then
-        local fallback_name = clean_name:gsub("[%-_]", " ")
-        results, err = self.plugin.api:search_books(fallback_name)
+        results, err = self.plugin.api:search_books(filename)
     end
 
     if not results or not results.content or #results.content == 0 then
@@ -173,26 +86,12 @@ function KomgaSync:matchCurrentBook()
         return
     end
 
-    -- Prioritize results where the series matches the parent directory
-    if parent_dir ~= "" then
-        local p_lower = parent_dir:lower()
-        table.sort(results.content, function(a, b)
-            local a_series = (a.seriesTitle or a.seriesName or ""):lower()
-            local b_series = (b.seriesTitle or b.seriesName or ""):lower()
-            local a_match = (a_series == p_lower or p_lower:find(a_series, 1, true) or a_series:find(p_lower, 1, true)) and 1 or 0
-            local b_match = (b_series == p_lower or p_lower:find(b_series, 1, true) or b_series:find(p_lower, 1, true)) and 1 or 0
-            return a_match > b_match
-        end)
-    end
-
     local ButtonDialog = require("ui/widget/buttondialog")
     local UIManager = require("ui/uimanager")
 
     local buttons = {}
     local dialog
-    -- Take up to 10 matching books
-    local limit = math.min(#results.content, 10)
-    for i = 1, limit do
+    for i = 1, #results.content do
         local book = results.content[i]
         local series = book.seriesTitle or book.seriesName or ""
         local title = (book.metadata and book.metadata.title) or book.name or "Untitled"
