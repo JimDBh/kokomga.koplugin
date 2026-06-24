@@ -23,10 +23,23 @@ For detailed installation guides, configuration walk-throughs, troubleshooting, 
 
 *(Note: The screenshots below are for reference and may not exactly reflect the newest version)*
 
-| Browser Grid View | Browser List View |
-| :---: | :---: |
-| [![Browser Grid View](screenshots/browser_grid.png)](screenshots/browser_grid.png) | [![Browser List View](screenshots/browser_list.png)](screenshots/browser_list.png) |
-| **Setup & Settings** | **Auto-Download Next Chapter** |
-| [![Options & Setup](screenshots/options_screenshot.png)](screenshots/options_screenshot.png) | [![Auto-Download Next Chapter](screenshots/auto_download_next.png)](screenshots/auto_download_next.png) |
+<table>
+  <tr>
+    <th width="50%">Browser Grid View</th>
+    <th width="50%">Browser List View</th>
+  </tr>
+  <tr>
+    <td><a href="screenshots/browser_grid.png"><img src="screenshots/browser_grid.png" alt="Browser Grid View"></a></td>
+    <td><a href="screenshots/browser_list.png"><img src="screenshots/browser_list.png" alt="Browser List View"></a></td>
+  </tr>
+  <tr>
+    <th>Setup &amp; Settings</th>
+    <th>Auto-Download Next Chapter</th>
+  </tr>
+  <tr>
+    <td><a href="screenshots/options_screenshot.png"><img src="screenshots/options_screenshot.png" alt="Options & Setup"></a></td>
+    <td><a href="screenshots/auto_download_next.png"><img src="screenshots/auto_download_next.png" alt="Auto-Download Next Chapter"></a></td>
+  </tr>
+</table>
 
 
