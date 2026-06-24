@@ -2,7 +2,7 @@
 
 ## Visuals, Styling and E-Ink Optimizations
 - [ ] Add border/boundary to book/comic covers (adaptive black or white border depending on night/dark mode)
-- [ ] Improve list mode design: make separators/lines more distinct (the default line is too faint) and add horizontal padding (left and right)
+- [x] Improve list mode design: make separators/lines more distinct (the default line is too faint) and add horizontal padding (left and right)
 - [ ] Display the active filter status in the top title bar using short indicators, light highlights, icons, or emojis
 
 ## Metadata and Status Display in Browser
