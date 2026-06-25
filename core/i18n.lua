@@ -117,7 +117,15 @@ local translations = {
         ["No matching book found on Komga server"] = "未在 Komga 服务器上找到匹配的书籍",
         ["Prev"] = "上一页",
         ["Next"] = "下一页",
-        ["No active book open to unlink."] = "没有打开的活动书籍以取消关联。"
+        ["No active book open to unlink."] = "没有打开的活动书籍以取消关联。",
+        ["Incompatible system: LuaSettings not found."] = "系统不兼容：未找到 LuaSettings。",
+        ["No directory set for download! Please set a Home Directory or custom path."] = "未设置下载目录！请设置主目录或自定义路径。",
+        ["Manual Komga Sync"] = "手动 Komga 同步",
+        ["Vol."] = "卷",
+        ["By:"] = "作者:",
+        ["Books:"] = "书籍:",
+        ["Unread:"] = "未读:",
+        ["In Progress:"] = "阅读中:"
     }
 }
 
