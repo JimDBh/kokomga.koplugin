@@ -123,7 +123,7 @@ local translations = {
         ["Manual Komga Sync"] = "手动 Komga 同步",
         ["Vol."] = "卷",
         ["By:"] = "作者:",
-        ["Books:"] = "书籍:",
+        ["Books:"] = "册数:",
         ["Unread:"] = "未读:",
         ["In Progress:"] = "阅读中:"
     }
