@@ -246,19 +246,11 @@ function KomgaPlugin:onReaderReady()
             return self.orig_kosync_updateProgress(kosync_instance, ensure_networking, interactive, on_suspend)
         end
     end
-
-    
-    -- If KOSync is present but its auto_sync is off, it won't schedule an automatic pull.
-    -- We force schedule one here so our interceptor catches it and Komga still auto-pulls!
-    if self.ui.kosync and not self.ui.kosync.settings.auto_sync then
-        UIManager:nextTick(function()
-            self.ui.kosync:getProgress(true, false)
-        end)
-    end
 end
 
 function KomgaPlugin:onPageUpdate(page)
     if not self.is_active or not page then return end
+    if self.ui.kosync and not self.ui.kosync.settings.auto_sync then return end
     
     local interval = tonumber(self.settings.sync_interval_pages) or 0
     if interval > 0 then
@@ -284,6 +276,7 @@ end
 function KomgaPlugin:onCloseDocument()
     if not self.is_active then return end
     self.is_active = false
+    if self.ui.kosync then return end
     local ui = self.ui
     local filepath = ui and ui.document and ui.document.file
     if filepath then
