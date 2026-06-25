@@ -250,7 +250,7 @@ end
 
 function KomgaPlugin:onPageUpdate(page)
     if not self.is_active or not page then return end
-    if self.ui.kosync and not self.ui.kosync.settings.auto_sync then return end
+    if self.ui.kosync then return end
     
     local interval = tonumber(self.settings.sync_interval_pages) or 0
     if interval > 0 then
