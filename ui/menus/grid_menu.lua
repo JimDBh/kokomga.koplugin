@@ -43,7 +43,8 @@ function KomgaGridItem:init()
     local _ = self.menu and self.menu.plugin and self.menu.plugin.i18n and self.menu.plugin.i18n._ or function(s) return s end
     local title_text = self.entry.text or self.entry.title or _("Unknown")
     if self.entry.cover_type == "book" and not self.entry.cover_id then
-        if self.menu and self.menu.selected_books and self.menu.selected_books[self.entry.cover_id] then
+        local book_id = self.entry.book and self.entry.book.id
+        if book_id and self.menu and self.menu.selected_books and self.menu.selected_books[book_id] then
             title_text = "[✓] " .. title_text
         else
             title_text = "[ ] " .. title_text
