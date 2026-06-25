@@ -281,16 +281,17 @@ function KomgaAPI:download_book(book_id, dest_filepath)
     local headers = self:get_headers()
     headers["Accept"] = nil
     
+    local file, err
     local sink_func = nil
     if dest_filepath then
-        local file, err = io.open(dest_filepath, "wb")
+        file, err = io.open(dest_filepath, "wb")
         if not file then
             return nil, "Failed to open file for writing: " .. tostring(err)
         end
         sink_func = ltn12.sink.file(file)
     end
     
-    local res, err = perform_request({
+    local res, req_err = perform_request({
         url = url,
         method = "GET",
         headers = headers,
@@ -298,9 +299,14 @@ function KomgaAPI:download_book(book_id, dest_filepath)
         timeout = 120,
     })
     
+    if file then
+        pcall(file.close, file)
+    end
+    
     if not res then 
-        logger.err("KomgaAPI:download_book request failed", tostring(err), "URL:", url)
-        return nil, err 
+        logger.err("KomgaAPI:download_book request failed", tostring(req_err), "URL:", url)
+        if dest_filepath then os.remove(dest_filepath) end
+        return nil, req_err 
     end
     if res.code < 200 or res.code >= 300 then
         logger.err("KomgaAPI:download_book bad status", tostring(res.code), "URL:", url)

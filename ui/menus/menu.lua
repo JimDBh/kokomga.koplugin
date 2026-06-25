@@ -56,28 +56,12 @@ function KomgaMenu:createSettingsMenu()
                     callback = function() self:promptInput(_("Custom Download Dir"), "download_dir") end
                 },
                 {
-                    text = _("Sync behavior"),
+                    text = _("Use Komga server progress when available"),
+                    checked_func = function() return self.plugin.settings.use_komga_sync end,
                     keep_menu_open = true,
-                    sub_item_table_func = function()
-                        return {
-                            {
-                                text = _("Use Komga server progress when available"),
-                                checked_func = function() return self.plugin.settings.use_komga_sync end,
-                                keep_menu_open = true,
-                                callback = function()
-                                    self.plugin.settings.use_komga_sync = not self.plugin.settings.use_komga_sync
-                                    self.plugin:saveSettings()
-                                end
-                            },
-                            {
-                                text_func = function()
-                                    local pages = self.plugin.settings.sync_interval_pages or 5
-                                    return T(_("Auto-push progress every %1 pages"), pages)
-                                end,
-                                keep_menu_open = true,
-                                callback = function() self:promptInput(_("Auto-push progress every %1 pages"), "sync_interval_pages", true) end
-                            }
-                        }
+                    callback = function()
+                        self.plugin.settings.use_komga_sync = not self.plugin.settings.use_komga_sync
+                        self.plugin:saveSettings()
                     end
                 },
                 {

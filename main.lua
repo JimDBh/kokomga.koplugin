@@ -58,7 +58,6 @@ local DEFAULT_SETTINGS = {
     matched_books_cache = {},
     download_dir = "",
     download_to_subfolder = true,
-    sync_interval_pages = 5,
     auto_rtl_direction = false
 }
 
@@ -244,104 +243,6 @@ function KomgaPlugin:onReaderReady()
             -- Fallback to native KOSync
             logger.info("KomgaPlugin: Falling back to native KOSync:updateProgress")
             return self.orig_kosync_updateProgress(kosync_instance, ensure_networking, interactive, on_suspend)
-        end
-    end
-end
-
-function KomgaPlugin:onPageUpdate(page)
-    if not self.is_active or not page then return end
-    if self.ui.kosync then return end
-    
-    local interval = tonumber(self.settings.sync_interval_pages) or 0
-    if interval > 0 then
-        if not self.last_synced_page then
-            self.last_synced_page = page
-        elseif math.abs(page - self.last_synced_page) >= interval then
-            self.last_synced_page = page
-            local ui = self.ui
-            if ui then
-                local NetworkMgr = require("ui/network/manager")
-                if NetworkMgr:isOnline() then
-                    self.sync:pushProgressForDocument(ui, true, false)
-                    self.is_dirty = false
-                else
-                    self.is_dirty = true
-                    logger.info("KomgaPlugin: Device offline, progress sync marked dirty for later.")
-                end
-            end
-        end
-    end
-end
-
-function KomgaPlugin:onCloseDocument()
-    if not self.is_active then return end
-    self.is_active = false
-    if self.ui.kosync then return end
-    local ui = self.ui
-    local filepath = ui and ui.document and ui.document.file
-    if filepath then
-        local NetworkMgr = require("ui/network/manager")
-        if NetworkMgr:isOnline() then
-            self.sync:pushProgressForDocument(ui, true, false)
-        end
-    end
-end
-
-function KomgaPlugin:onResume()
-    if not self.is_active then return end
-    if not self.ui.kosync then
-        local Device = require("device")
-        local NetworkMgr = require("ui/network/manager")
-        if Device:hasWifiRestore() and NetworkMgr.wifi_was_on and G_reader_settings:isTrue("auto_restore_wifi") then
-            return
-        end
-        if NetworkMgr:isOnline() then
-            UIManager:scheduleIn(1, function()
-                if self.is_active and self.ui then
-                    self.sync:pullProgress(self.ui, false, false)
-                end
-            end)
-        end
-    end
-end
-
-function KomgaPlugin:onSuspend()
-    if not self.is_active then return end
-    if not self.ui.kosync then
-        local ui = self.ui
-        if ui and ui.document and ui.document.file then
-            local NetworkMgr = require("ui/network/manager")
-            if NetworkMgr:isOnline() then
-                self.sync:pushProgressForDocument(ui, true, false)
-            end
-        end
-    end
-end
-
-function KomgaPlugin:onNetworkConnected()
-    if not self.is_active then return end
-    if self.is_dirty then
-        local ui = self.ui
-        if ui and ui.document and ui.document.file then
-            self.sync:pushProgressForDocument(ui, true, false)
-            self.is_dirty = false
-        end
-    end
-    if not self.ui.kosync then
-        UIManager:scheduleIn(0.5, function()
-            if self.is_active and self.ui then
-                self.sync:pullProgress(self.ui, false, false)
-            end
-        end)
-    end
-end
-
-function KomgaPlugin:onNetworkDisconnecting()
-    if not self.is_active then return end
-    if not self.ui.kosync then
-        local ui = self.ui
-        if ui and ui.document and ui.document.file then
-            self.sync:pushProgressForDocument(ui, true, false)
         end
     end
 end
