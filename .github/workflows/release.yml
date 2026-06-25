@@ -1,0 +1,40 @@
+name: Release Plugin
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Plugin ZIP
+        run: |
+          # Create the expected folder structure for the plugin
+          mkdir kokomga.koplugin
+          
+          # Sync all files to the folder, excluding unnecessary development files
+          rsync -av --exclude='kokomga.koplugin' \
+                    --exclude='.git' \
+                    --exclude='.github' \
+                    --exclude='.gitignore' \
+                    --exclude='screenshots' \
+                    --exclude='TODO.md' \
+                    --exclude='*.zip' \
+                    ./ kokomga.koplugin/
+          
+          # Create the final zip archive
+          zip -r kokomga.koplugin.zip kokomga.koplugin/
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: kokomga.koplugin.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
