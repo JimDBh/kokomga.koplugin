@@ -24,6 +24,8 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 - **Improved List Mode UI Layout**:
   - Made the list-mode separator lines significantly more distinct by changing the color to a darker mid-gray (`COLOR_GRAY`) and dynamically scaling the line height (`delimiter_h`) based on the device's screen scale factor.
   - Added wider, more balanced horizontal padding (left and right) on list view rows to give them elegant margins and breathe better on a wider variety of display devices.
+- **Multi-language Localization**:
+  - Added complete localization dictionaries for Traditional Chinese (`zh_TW`/`zh_HK`), Japanese (`ja`), and Spanish (`es`).
 
 ### Fixed
 - **Memory Safety & Mutex Crash Prevention**:
@@ -31,6 +33,14 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
   - Eliminated custom manual memory/badge tracking and destruction logic in favor of KOReader's native garbage collector and widget parenting lifecycle.
 - **Robust Type Checking**:
   - Added defensive type verification (`type(...) == "table"`) on both `book` entries and `readProgress` objects to prevent the runtime error "attempt to index local 'readProgress' (a function value)".
+- **Selection State on Coverless Books**:
+  - Fixed book selection state checkmark rendering on coverless books in list/grid browser views.
+- **File Locks on Download Failure**:
+  - Ensured download file handles are always closed to prevent file access locks on Windows when downloads fail.
+- **KOSync Settings Integration**:
+  - Aligned syncing actions to depend purely on native KOSync configuration state. Removed redundant custom sync interval options, background progress push loops, and offline Wi-Fi connection prompt warnings.
+- **Dead Code & Import Cleanup**:
+  - Removed multiple unused local variables, duplicate imports, and obsolete helper functions (`sanitize_for_settings`, custom recursive folder creation, etc.) to optimize the plugin's memory footprint.
 
 ---
 
