@@ -277,9 +277,6 @@ function KomgaBrowser:setViewMode(mode, save_preference)
         end
         self.columns = nil
         self.grid_rows = nil
-        local Screen = require("device").screen
-        local rows = self.plugin.settings.list_rows or 5
-        self.item_height = math.floor(Screen:getHeight() / rows)
     end
     
     -- Recalibrate pagination when the mode switch changes page_size.

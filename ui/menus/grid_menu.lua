@@ -15,10 +15,7 @@ local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local Screen = Device.screen
-local _ = require("gettext")
 local logger = require("logger")
-
-local Screen = require("device").screen
 
 local GRID_LAYOUT = {
     padding = Screen:scaleBySize(6),

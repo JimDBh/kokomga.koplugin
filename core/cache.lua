@@ -7,46 +7,9 @@ local logger = require("logger")
 
 local KomgaCache = {}
 
-local function sanitize_for_settings(val)
-    if type(val) == "table" then
-        local res = {}
-        for k, v in pairs(val) do
-            if type(k) == "string" or type(k) == "number" then
-                local s_v = sanitize_for_settings(v)
-                if s_v ~= nil then
-                    res[k] = s_v
-                end
-            end
-        end
-        return res
-    elseif type(val) == "string" or type(val) == "number" or type(val) == "boolean" then
-        return val
-    end
-    return nil
-end
-
 function KomgaCache:new(plugin)
     local o = { plugin = plugin }
     return setmetatable(o, { __index = self })
-end
-
--- Helper to recursively create a directory structure
-function KomgaCache:mkdir_rec(path)
-    local logger = require("logger")
-    logger.dbg("KomgaCache:mkdir_rec called with path:", path)
-    local lfs = require("libs/libkoreader-lfs")
-    
-    local accum = ""
-    if path:sub(1,1) == "/" then
-        accum = "/"
-        path = path:sub(2)
-    end
-    
-    for segment in path:gmatch("[^/]+") do
-        accum = accum .. segment .. "/"
-        local ok, err = lfs.mkdir(accum)
-        logger.dbg("KomgaCache:mkdir_rec creating", accum, "ok:", ok, "err:", err)
-    end
 end
 
 -- Helper to write binary files safely using Lua I/O
@@ -86,7 +49,8 @@ function KomgaCache:cacheThumbnail(type_label, id, lastModifiedString, force)
     
     local DataStorage = require("datastorage")
     local covers_dir = DataStorage:getDataDir() .. "/komga_covers"
-    self:mkdir_rec(covers_dir)
+    local util = require("util")
+    util.makePath(covers_dir .. "/")
     
     local local_path = covers_dir .. "/" .. cache_key .. ".jpg"
     

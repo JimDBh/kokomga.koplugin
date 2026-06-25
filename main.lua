@@ -140,7 +140,6 @@ function KomgaPlugin:notify(message, type)
 end
 
 function KomgaPlugin:getDownloadDir()
-    local logger = require("logger")
     logger.info("KomgaPlugin: getDownloadDir called")
     if self.settings.download_dir and self.settings.download_dir ~= "" then
         logger.info("KomgaPlugin: using custom download_dir:", self.settings.download_dir)
@@ -280,11 +279,6 @@ function KomgaPlugin:onPageUpdate(page)
             end
         end
     end
-end
-
-function KomgaPlugin:onEndOfBook()
-    -- This is now handled by our monkey-patch in onReaderReady, 
-    -- so we don't need to do anything here anymore.
 end
 
 function KomgaPlugin:onCloseDocument()
