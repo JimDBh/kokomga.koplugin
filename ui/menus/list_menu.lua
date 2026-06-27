@@ -157,6 +157,15 @@ function KomgaListItem:init()
         local orig_paintTo = cover_widget.paintTo
         cover_widget.paintTo = function(this, canvas, x, y)
             orig_paintTo(this, canvas, x, y)
+            
+            -- Draw adaptive border around cover
+            local border_w = math.max(1, Screen:scaleBySize(1))
+            local border_color = Screen.night_mode and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+            canvas:paintRect(x, y, cover_w, border_w, border_color) -- Top
+            canvas:paintRect(x, y + cover_h - border_w, cover_w, border_w, border_color) -- Bottom
+            canvas:paintRect(x, y, border_w, cover_h, border_color) -- Left
+            canvas:paintRect(x + cover_w - border_w, y, border_w, cover_h, border_color) -- Right
+
             -- Top-Left: Selected Checkmark
             if self.menu and self.menu.selected_books and self.menu.selected_books[self.entry.cover_id] then
                 check_badge:paintTo(canvas, x + Screen:scaleBySize(4), y + Screen:scaleBySize(4))

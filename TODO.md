@@ -1,7 +1,7 @@
 # Komga Plugin TODO
 
 ## Visuals, Styling and E-Ink Optimizations
-- [ ] Add border/boundary to book/comic covers (adaptive black or white border depending on night/dark mode)
+- [x] Add border/boundary to book/comic covers (adaptive black or white border depending on night/dark mode)
 - [ ] Display the active filter status in the top title bar using short indicators, light highlights, icons, or emojis
 
 ## Metadata and Status Display in Browser
