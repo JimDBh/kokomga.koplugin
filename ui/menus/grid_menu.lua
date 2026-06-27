@@ -163,7 +163,7 @@ function KomgaGridItem:init()
             
             -- Draw adaptive border around cover
             local border_w = math.max(1, Screen:scaleBySize(1))
-            local border_color = Screen.night_mode and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+            local border_color = Blitbuffer.COLOR_GRAY
             canvas:paintRect(x, y, cover_w, border_w, border_color) -- Top
             canvas:paintRect(x, y + cover_h - border_w, cover_w, border_w, border_color) -- Bottom
             canvas:paintRect(x, y, border_w, cover_h, border_color) -- Left
