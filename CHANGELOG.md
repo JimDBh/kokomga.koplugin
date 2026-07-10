@@ -4,6 +4,14 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-07-09
+
+### Fixed
+- **File Extension Handling**:
+  - Fixed an issue where books ending with decimal volume or chapter numbers (e.g., `xxx-vol-12.5`) would be downloaded without their extensions, preventing KOReader from recognizing them.
+  - Refined extension validation to check specifically for the expected extension when the media type is known, ensuring even mismatched metadata extensions are corrected (e.g., ensuring a `.cbz` file is always saved as `.cbz` even if named `.pdf` on the server).
+  - Maintained general non-numeric extension validation for fallback cases when the media type is unknown.
+
 ## [2.0.0] - 2026-06-24
 
 ### Added
