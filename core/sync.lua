@@ -680,6 +680,13 @@ function KomgaSync:pushProgressForDocument(ui, is_quiet, ensure_networking)
     do_push()
 end
 
+-- Helper to check if a filename has a valid (non-numeric) file extension
+local function has_valid_extension(name)
+    local matched_ext = name:match("%.([a-zA-Z0-9]+)$")
+    if not matched_ext then return false end
+    return not matched_ext:match("^%d+$")
+end
+
 -- Get expected local path for a book
 function KomgaSync:getBookLocalPath(book, series_title)
     local filename = book.name or book.id
@@ -692,11 +699,14 @@ function KomgaSync:getBookLocalPath(book, series_title)
         elseif mt == "application/x-rar-compressed" or mt == "application/x-rar" then ext = ".cbr"
         end
     end
-    if ext ~= "" and not filename:match("%.[a-zA-Z0-9]+$") then
-        filename = filename .. ext
-    end
-    if not filename:match("%.[a-zA-Z0-9]+$") then
-        filename = filename .. ".cbz"
+    if ext ~= "" then
+        if filename:sub(-#ext):lower() ~= ext:lower() then
+            filename = filename .. ext
+        end
+    else
+        if not has_valid_extension(filename) then
+            filename = filename .. ".cbz"
+        end
     end
     filename = filename:gsub('[/%\\%:%*%?%"%<%>%|]', '_')
     local download_dir = self.plugin:getDownloadDir()
