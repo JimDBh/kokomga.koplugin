@@ -184,7 +184,6 @@ function KomgaBrowser:init()
     self.title_bar_left_icon = "search"
     self.onLeftButtonTap = function() end
     self.close_callback = function()
-        self:onCloseWidget()
         local NetworkMgr = require("ui/network/manager")
         NetworkMgr:afterWifiAction()
     end

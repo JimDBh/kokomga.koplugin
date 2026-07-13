@@ -187,7 +187,10 @@ function KomgaMenu:createSettingsMenu()
 
     table.insert(submenu, {
         text = _("Komga Browser"),
-        callback = function()
+        callback = function(touchmenu_instance)
+            if touchmenu_instance and touchmenu_instance.onCloseAllMenus then
+                touchmenu_instance:onCloseAllMenus()
+            end
             self:showBrowser()
         end
     })
