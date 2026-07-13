@@ -11,6 +11,9 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 ### Fixed
 - **Dispatcher Actions**:
   - Fixed the manual sync action (`komga_sync_now`) which had an incorrect `"sync"` category and missing event method, ensuring it now correctly dispatches and triggers manual synchronization.
+- **Home Screen Return Behavior**:
+  - Aligned browser window stack properties and resolved settings menu stack retention to ensure closing the browser correctly returns to launcher/homescreen plugins (e.g. Simple UI) instead of showing the book file manager.
+
 
 
 ## [2.0.1] - 2026-07-09
