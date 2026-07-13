@@ -15,6 +15,25 @@ function KomgaMenu:new(plugin)
     return setmetatable(o, { __index = self })
 end
 
+function KomgaMenu:showBrowser()
+    local NetworkMgr = require("ui/network/manager")
+    NetworkMgr:runWhenOnline(function()
+        if not self.plugin.settings.server_url or self.plugin.settings.server_url == "" or
+           not self.plugin.settings.api_key or self.plugin.settings.api_key == "" then
+            self:promptSetup(function()
+                local KomgaBrowser = require("ui/browser")
+                local browser = KomgaBrowser:new{ plugin = self.plugin }
+                UIManager:show(browser)
+            end)
+        else
+            local KomgaBrowser = require("ui/browser")
+            local browser = KomgaBrowser:new{ plugin = self.plugin }
+            UIManager:show(browser)
+        end
+    end)
+end
+
+
 -- Plugin settings sub-menu
 function KomgaMenu:createSettingsMenu()
     local _ = self.plugin.i18n._
@@ -169,21 +188,7 @@ function KomgaMenu:createSettingsMenu()
     table.insert(submenu, {
         text = _("Komga Browser"),
         callback = function()
-            local NetworkMgr = require("ui/network/manager")
-            NetworkMgr:runWhenOnline(function()
-                if not self.plugin.settings.server_url or self.plugin.settings.server_url == "" or
-                   not self.plugin.settings.api_key or self.plugin.settings.api_key == "" then
-                    self:promptSetup(function()
-                        local KomgaBrowser = require("ui/browser")
-                        local browser = KomgaBrowser:new{ plugin = self.plugin }
-                        UIManager:show(browser)
-                    end)
-                else
-                    local KomgaBrowser = require("ui/browser")
-                    local browser = KomgaBrowser:new{ plugin = self.plugin }
-                    UIManager:show(browser)
-                end
-            end)
+            self:showBrowser()
         end
     })
 

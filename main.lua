@@ -125,12 +125,27 @@ end
 
 function KomgaPlugin:registerEvents()
     Dispatcher:registerAction("komga_sync_now", {
-        category = "sync",
+        category = "none",
         title = self.i18n._("Manual Komga Sync"),
         event = "KomgaSyncNow",
-        handler = function() self.sync:matchCurrentBook() end
+        general = true,
+    })
+    Dispatcher:registerAction("komga_browse", {
+        category = "none",
+        title = self.i18n._("Browse Komga library"),
+        event = "KomgaBrowse",
+        general = true,
     })
 end
+
+function KomgaPlugin:onKomgaSyncNow()
+    self.sync:matchCurrentBook()
+end
+
+function KomgaPlugin:onKomgaBrowse()
+    self.menu:showBrowser()
+end
+
 
 function KomgaPlugin:notify(message, type)
     type = type or "info"

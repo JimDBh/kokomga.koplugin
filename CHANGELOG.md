@@ -4,6 +4,15 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+### Added
+- **KOReader Action Registration**:
+  - Registered the Komga Library Browser as a global KOReader action (`komga_browse`), enabling users to bind gesture shortcuts, key presses, or profiles to launch the browser directly from both the file manager and the reader.
+
+### Fixed
+- **Dispatcher Actions**:
+  - Fixed the manual sync action (`komga_sync_now`) which had an incorrect `"sync"` category and missing event method, ensuring it now correctly dispatches and triggers manual synchronization.
+
+
 ## [2.0.1] - 2026-07-09
 
 ### Fixed
