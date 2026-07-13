@@ -163,9 +163,6 @@ local function toggleTitleButtons(browser, opts)
 end
 
 local KomgaBrowser = KomgaListMenu:extend{
-    is_interactive = true,
-    is_fullscreen = true,
-    covers_fullscreen = true,
     is_borderless = true,
     is_popout = false,
     title_bar_fm_style = true,
