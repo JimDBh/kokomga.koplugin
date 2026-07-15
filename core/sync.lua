@@ -1266,13 +1266,11 @@ function KomgaSync:collectBgDownloads()
                         end
                         self.plugin:saveSettings()
 
-                        -- Show silent info toast/notification to the user
-                        local T = self.plugin.i18n.T
-                        local _ = self.plugin.i18n._
+                        -- Log pre-download completion silently
                         if #result.downloaded == 1 then
-                            self.plugin:notify(T(_("Next chapter downloaded in background: %1"), result.downloaded[1].filename), "info")
+                            logger.info("KomgaSync: Next chapter downloaded in background: " .. tostring(result.downloaded[1].filename))
                         else
-                            self.plugin:notify(T(_("Downloaded %1 next chapters in background"), #result.downloaded), "info")
+                            logger.info("KomgaSync: Downloaded " .. tostring(#result.downloaded) .. " next chapters in background")
                         end
 
                         -- Trigger UI refresh if FileManager is open
