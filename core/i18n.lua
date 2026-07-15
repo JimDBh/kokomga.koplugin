@@ -125,7 +125,13 @@ local translations = {
         ["By:"] = "作者:",
         ["Books:"] = "册数:",
         ["Unread:"] = "未读:",
-        ["In Progress:"] = "阅读中:"
+        ["In Progress:"] = "阅读中:",
+        ["Pre-download next chapters: Disabled"] = "预下载后续章节：已禁用",
+        ["Pre-download next chapters: 1 chapter"] = "预下载后续章节：1 章",
+        ["Pre-download next chapters: %1 chapters"] = "预下载后续章节：%1 章",
+        ["Pre-download next chapters (0 to disable)"] = "预下载后续章节数量（输入 0 禁用）",
+        ["Skip end-of-book prompt (directly open next book)"] = "跳过图书结束提示（直接打开下一本书）",
+        ["Browse Komga library"] = "浏览 Komga 图书馆"
     }
 }
 
@@ -249,7 +255,13 @@ translations["zh_TW"] = {
     ["By:"] = "作者:",
     ["Books:"] = "冊數:",
     ["Unread:"] = "未讀:",
-    ["In Progress:"] = "閱讀中:"
+    ["In Progress:"] = "閱讀中:",
+    ["Pre-download next chapters: Disabled"] = "預下載後續章節：已停用",
+    ["Pre-download next chapters: 1 chapter"] = "預下載後續章節：1 章",
+    ["Pre-download next chapters: %1 chapters"] = "預下載後續章節：%1 章",
+    ["Pre-download next chapters (0 to disable)"] = "預下載後續章節數量（輸入 0 停用）",
+    ["Skip end-of-book prompt (directly open next book)"] = "跳過圖書結束提示（直接開啟下一本書）",
+    ["Browse Komga library"] = "瀏覽 Komga 圖書館"
 }
 
 -- Japanese
@@ -372,7 +384,13 @@ translations["ja"] = {
     ["By:"] = "著者:",
     ["Books:"] = "冊数:",
     ["Unread:"] = "未読:",
-    ["In Progress:"] = "読書中:"
+    ["In Progress:"] = "読書中:",
+    ["Pre-download next chapters: Disabled"] = "次の章の事前ダウンロード: 無効",
+    ["Pre-download next chapters: 1 chapter"] = "次の章の事前ダウンロード: 1 章",
+    ["Pre-download next chapters: %1 chapters"] = "次の章の事前ダウンロード: %1 章",
+    ["Pre-download next chapters (0 to disable)"] = "次の章の事前ダウンロード数（0で無効化）",
+    ["Skip end-of-book prompt (directly open next book)"] = "読了後の確認をスキップ（直接次の本を開く）",
+    ["Browse Komga library"] = "Komgaライブラリを閲覧"
 }
 
 -- Spanish
@@ -495,7 +513,13 @@ translations["es"] = {
     ["By:"] = "Por:",
     ["Books:"] = "Libros:",
     ["Unread:"] = "Sin leer:",
-    ["In Progress:"] = "En curso:"
+    ["In Progress:"] = "En curso:",
+    ["Pre-download next chapters: Disabled"] = "Pre-descargar siguientes capítulos: Desactivado",
+    ["Pre-download next chapters: 1 chapter"] = "Pre-descargar siguientes capítulos: 1 capítulo",
+    ["Pre-download next chapters: %1 chapters"] = "Pre-descargar siguientes capítulos: %1 capítulos",
+    ["Pre-download next chapters (0 to disable)"] = "Pre-descargar siguientes capítulos (0 para desactivar)",
+    ["Skip end-of-book prompt (directly open next book)"] = "Omitir aviso de fin de libro (abrir directamente siguiente libro)",
+    ["Browse Komga library"] = "Examinar biblioteca de Komga"
 }
 
 -- Fallbacks for Chinese variants

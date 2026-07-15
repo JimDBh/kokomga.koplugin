@@ -4,17 +4,33 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-14
+
 ### Added
+- **Multi-Chapter Background Pre-Downloading**:
+  - Configurable setting under options to auto-download the next N chapters/books in the background (setting to `0` disables it).
+  - Runs sequentially in a background subprocess to avoid any UI lag or blocking during reading.
+  - Added cooperative polling (1-second check interval) and standby lock management to prevent the device from entering sleep mode mid-download.
+- **Skip End-of-Book Prompt**:
+  - Added a setting to skip the end-of-book prompt and directly open the next book if it has already been pre-downloaded locally.
 - **KOReader Action Registration**:
   - Registered the Komga Library Browser as a global KOReader action (`komga_browse`), enabling users to bind gesture shortcuts, key presses, or profiles to launch the browser directly from both the file manager and the reader.
 
+### Changed
+- **Coordinated Pre-Download Queue**:
+  - Restricted background pre-downloads to exactly 1 concurrent subprocess to preserve device battery and bandwidth.
+  - Implemented smart foreground waiting/polling if the user opens a chapter that is currently pre-downloading in the background, preventing duplicate network downloads and file corruption.
+  - Cascade-triggers subsequent pre-downloads only when the user changes chapters during an active run, eliminating redundant check requests.
+- **Silent Background Logs**:
+  - Replaced the visual background pre-download completion toast with silent background logs to avoid interrupting the reading flow.
+- **Localization (i18n)**:
+  - Added complete Simplified Chinese, Traditional Chinese, Japanese, and Spanish translations for all new pre-download options, settings, and dispatcher actions.
+
 ### Fixed
 - **Dispatcher Actions**:
-  - Fixed the manual sync action (`komga_sync_now`) which had an incorrect `"sync"` category and missing event method, ensuring it now correctly dispatches and triggers manual synchronization.
+  - Fixed the manual sync action (`komga_sync_now`) which had an incorrect `"none"` category and missing event method, ensuring it now correctly dispatches and triggers manual synchronization.
 - **Home Screen Return Behavior**:
   - Aligned browser window stack properties and resolved settings menu stack retention to ensure closing the browser correctly returns to launcher/homescreen plugins (e.g. Simple UI) instead of showing the book file manager.
-
-
 
 ## [2.0.1] - 2026-07-09
 
