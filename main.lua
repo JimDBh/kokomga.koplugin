@@ -58,7 +58,8 @@ local DEFAULT_SETTINGS = {
     matched_books_cache = {},
     download_dir = "",
     download_to_subfolder = true,
-    auto_rtl_direction = false
+    auto_rtl_direction = false,
+    auto_download_next = false
 }
 
 function KomgaPlugin:init()
@@ -212,6 +213,10 @@ function KomgaPlugin:onReaderReady()
                 logger.info("KomgaPlugin: Automatically switched reading order to RTL")
             end
         end
+    end
+
+    if self.settings.auto_download_next then
+        self.sync:preDownloadNextBook(filepath)
     end
     
     if self.ui.kosync and not self.orig_kosync_getProgress then

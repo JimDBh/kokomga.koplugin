@@ -102,6 +102,15 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    text = _("Pre-download next chapter"),
+                    checked_func = function() return self.plugin.settings.auto_download_next end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.auto_download_next = not self.plugin.settings.auto_download_next
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
                     text = _("Layout Options"),
                     keep_menu_open = true,
                     sub_item_table_func = function()

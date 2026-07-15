@@ -9,7 +9,11 @@ local UIManager = require("ui/uimanager")
 local KomgaSync = {}
 
 function KomgaSync:new(plugin)
-    local o = { plugin = plugin }
+    local o = {
+        plugin = plugin,
+        bg_processes = {},
+        bg_collector_scheduled = false
+    }
     return setmetatable(o, { __index = self })
 end
 
@@ -1037,6 +1041,195 @@ function KomgaSync:downloadSeriesCoverIfMissing(book, final_dir, series_title)
         logger.info("KomgaSync: Successfully saved series cover to", cover_filepath)
     else
         logger.err("KomgaSync: Failed to write series cover file:", tostring(f_err))
+    end
+end
+
+function KomgaSync:preDownloadNextBook(filepath)
+    if not self.plugin.settings.auto_download_next then
+        logger.info("KomgaSync: auto_download_next is disabled, skipping pre-download")
+        return
+    end
+
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isOnline() then
+        logger.info("KomgaSync: Offline, skipping background pre-download check")
+        return
+    end
+
+    local book_id = self:getOrMatchBook(filepath)
+    if not book_id then
+        logger.warn("KomgaSync: Current book not matched, cannot pre-download next book")
+        return
+    end
+
+    -- Check if we are already downloading for this book_id
+    if not self.bg_processes then
+        self.bg_processes = {}
+    end
+    for _, proc in ipairs(self.bg_processes) do
+        if proc.current_book_id == book_id then
+            logger.info("KomgaSync: Already checking/downloading next book for current book:", book_id)
+            return
+        end
+    end
+
+    local ffiutil = require("ffi/util")
+    local UIManager = require("ui/uimanager")
+    local os = require("os")
+
+    -- Call runInSubProcess with_pipe = true
+    local pid, parent_read_fd = ffiutil.runInSubProcess(function(pid, child_write_fd)
+        local success, result = pcall(function()
+            local next_book = self.plugin.api:get_next_book(book_id)
+            if not next_book then
+                return { status = "no_next" }
+            end
+
+            local series_title = next_book.seriesTitle
+            local local_path, filename = self:getBookLocalPath(next_book, series_title)
+            if not local_path then
+                return { status = "error", message = "No download path available" }
+            end
+
+            local lfs = require("libs/libkoreader-lfs")
+            if lfs.attributes(local_path, "mode") == "file" then
+                return { status = "already_downloaded", local_path = local_path, next_book_id = next_book.id, filename = filename }
+            end
+
+            -- Start downloading
+            local tmp_path = local_path .. ".part"
+            local util = require("util")
+            local final_dir = local_path:match("(.*)/[^/]+")
+            util.makePath(final_dir .. "/")
+
+            logger.info("KomgaSync bg: Downloading next chapter in background to " .. tmp_path)
+            local dl_success, dl_err = self.plugin.api:download_book(next_book.id, tmp_path)
+            if dl_success then
+                pcall(save_book_metadata, local_path, next_book, series_title)
+                local os = require("os")
+                os.rename(tmp_path, local_path)
+                self:downloadSeriesCoverIfMissing(next_book, final_dir, series_title)
+                logger.info("KomgaSync bg: Finished downloading next chapter: " .. local_path)
+                return { status = "downloaded", local_path = local_path, next_book_id = next_book.id, filename = filename }
+            else
+                return { status = "error", message = tostring(dl_err) }
+            end
+        end)
+
+        local JSON = require("json")
+        local output_str
+        if success then
+            output_str = JSON.encode(result)
+        else
+            output_str = JSON.encode({ status = "error", message = tostring(result) })
+        end
+        ffiutil.writeToFD(child_write_fd, output_str, true)
+    end, true) -- with_pipe = true
+
+    if not pid then
+        logger.err("KomgaSync: Failed to fork background pre-download subprocess")
+        return
+    end
+
+    logger.info("KomgaSync: Spawning background pre-download subprocess. PID: " .. tostring(pid))
+    UIManager:preventStandby()
+
+    table.insert(self.bg_processes, {
+        pid = pid,
+        parent_read_fd = parent_read_fd,
+        current_book_id = book_id,
+        start_time = os.time()
+    })
+
+    if not self.bg_collector_scheduled then
+        self.bg_collector_scheduled = true
+        UIManager:scheduleIn(5, function()
+            self:collectBgDownloads()
+        end)
+    end
+end
+
+function KomgaSync:collectBgDownloads()
+    if not self.bg_processes or #self.bg_processes == 0 then
+        self.bg_collector_scheduled = false
+        return
+    end
+
+    local ffiutil = require("ffi/util")
+    local UIManager = require("ui/uimanager")
+    local os = require("os")
+
+    for i = #self.bg_processes, 1, -1 do
+        local proc = self.bg_processes[i]
+        if ffiutil.isSubProcessDone(proc.pid) then
+            logger.info("KomgaSync: Background pre-download subprocess done. PID: " .. tostring(proc.pid))
+            table.remove(self.bg_processes, i)
+            UIManager:allowStandby()
+
+            -- Read pipe output
+            local ret_str = ""
+            if proc.parent_read_fd then
+                ret_str = ffiutil.readAllFromFD(proc.parent_read_fd)
+            end
+
+            local JSON = require("json")
+            local ok, result = pcall(JSON.decode, ret_str)
+            if ok and result and type(result) == "table" then
+                if result.status == "downloaded" then
+                    -- Download succeeded!
+                    -- Update matched_books_cache in the parent process
+                    self.plugin.settings.matched_books_cache[result.local_path] = result.next_book_id
+                    self.plugin:saveSettings()
+
+                    -- Show a silent info toast/notification to the user
+                    local T = self.plugin.i18n.T
+                    local _ = self.plugin.i18n._
+                    self.plugin:notify(T(_("Next chapter downloaded in background: %1"), result.filename), "info")
+
+                    -- Trigger UI refresh if FileManager is open
+                    UIManager:nextTick(function()
+                        pcall(function()
+                            local BookInfoManager = require("plugins/coverbrowser.koplugin/bookinfomanager")
+                            if BookInfoManager and BookInfoManager.deleteBookInfo then
+                                BookInfoManager:deleteBookInfo(result.local_path)
+                            end
+                        end)
+                        local ok2, FileManager = pcall(require, "apps/filemanager/filemanager")
+                        if ok2 and FileManager.instance then
+                            if FileManager.instance.file_chooser and FileManager.instance.file_chooser.resetBookInfoCache then
+                                pcall(function() FileManager.instance.file_chooser.resetBookInfoCache(result.local_path) end)
+                            end
+                            FileManager.instance:onRefresh()
+                        end
+                    end)
+                elseif result.status == "already_downloaded" then
+                    logger.info("KomgaSync: Next chapter was already downloaded: " .. tostring(result.local_path))
+                    self.plugin.settings.matched_books_cache[result.local_path] = result.next_book_id
+                    self.plugin:saveSettings()
+                elseif result.status == "no_next" then
+                    logger.info("KomgaSync: Background check completed - no next chapter exists.")
+                elseif result.status == "error" then
+                    logger.warn("KomgaSync: Background pre-download failed: " .. tostring(result.message))
+                end
+            else
+                logger.err("KomgaSync: Failed to parse result from background download subprocess. Error: " .. tostring(result) .. " | Raw Input: " .. tostring(ret_str))
+            end
+        else
+            local elapsed = os.time() - proc.start_time
+            if elapsed > 600 then -- 10 minutes
+                logger.warn("KomgaSync: Background download subprocess PID: " .. tostring(proc.pid) .. " timed out. Terminating.")
+                ffiutil.terminateSubProcess(proc.pid)
+            end
+        end
+    end
+
+    if #self.bg_processes > 0 then
+        -- Schedule the next check
+        UIManager:scheduleIn(5, function()
+            self:collectBgDownloads()
+        end)
+    else
+        self.bg_collector_scheduled = false
     end
 end
 
