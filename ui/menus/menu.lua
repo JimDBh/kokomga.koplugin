@@ -48,12 +48,12 @@ function KomgaMenu:createSettingsMenu()
                 {
                     text = _("Server URL"),
                     keep_menu_open = true,
-                    callback = function() self:promptInput(_("Server URL"), "server_url") end
+                    callback = function(touchmenu_instance) self:promptInput(_("Server URL"), "server_url", nil, touchmenu_instance) end
                 },
                 {
                     text = _("API Key"),
                     keep_menu_open = true,
-                    callback = function() self:promptInput(_("API Key"), "api_key") end
+                    callback = function(touchmenu_instance) self:promptInput(_("API Key"), "api_key", nil, touchmenu_instance) end
                 },
                 {
                     text = _("Auto-Generate API Key"),
@@ -99,8 +99,8 @@ function KomgaMenu:createSettingsMenu()
                         end
                     end,
                     keep_menu_open = true,
-                    callback = function()
-                        self:promptInput(_("Pre-download next chapters (0 to disable)"), "auto_download_next", true)
+                    callback = function(touchmenu_instance)
+                        self:promptInput(_("Pre-download next chapters (0 to disable)"), "auto_download_next", true, touchmenu_instance)
                     end
                 },
                 {
@@ -115,7 +115,7 @@ function KomgaMenu:createSettingsMenu()
                 {
                     text = _("Custom Download Dir"),
                     keep_menu_open = true,
-                    callback = function() self:promptInput(_("Custom Download Dir"), "download_dir") end
+                    callback = function(touchmenu_instance) self:promptInput(_("Custom Download Dir"), "download_dir", nil, touchmenu_instance) end
                 },
                 {
                     text = _("Download into Series Subfolders"),
@@ -147,17 +147,17 @@ function KomgaMenu:createSettingsMenu()
                             {
                                 text_func = function() return T(_("List Mode Rows (%1)"), self.plugin.settings.list_rows or 5) end,
                                 keep_menu_open = true,
-                                callback = function() self:promptInput(_("List Rows"), "list_rows", true) end
+                                callback = function(touchmenu_instance) self:promptInput(_("List Rows"), "list_rows", true, touchmenu_instance) end
                             },
                             {
                                 text_func = function() return T(_("Grid Mode Columns (%1)"), self.plugin.settings.grid_columns or 3) end,
                                 keep_menu_open = true,
-                                callback = function() self:promptInput(_("Grid Columns"), "grid_columns", true) end
+                                callback = function(touchmenu_instance) self:promptInput(_("Grid Columns"), "grid_columns", true, touchmenu_instance) end
                             },
                             {
                                 text_func = function() return T(_("Grid Mode Rows (%1)"), self.plugin.settings.grid_rows or 3) end,
                                 keep_menu_open = true,
-                                callback = function() self:promptInput(_("Grid Rows"), "grid_rows", true) end
+                                callback = function(touchmenu_instance) self:promptInput(_("Grid Rows"), "grid_rows", true, touchmenu_instance) end
                             }
                         }
                     end
@@ -225,7 +225,7 @@ end
 
 
 -- UI prompt helper
-function KomgaMenu:promptInput(title, setting_key, is_number)
+function KomgaMenu:promptInput(title, setting_key, is_number, touchmenu_instance)
     local _ = self.plugin.i18n._
     local T = self.plugin.i18n.T
     local input
@@ -258,6 +258,9 @@ function KomgaMenu:promptInput(title, setting_key, is_number)
                             self.plugin:initAPI()
                         end
                         self.plugin:notify(T(_("Updated %1"), title), "info")
+                        if touchmenu_instance and touchmenu_instance.updateItems then
+                            touchmenu_instance:updateItems()
+                        end
                         UIManager:close(input)
                     end,
                 },
