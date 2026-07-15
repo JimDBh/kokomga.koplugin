@@ -6,7 +6,8 @@ A KOReader plugin that connects to your Komga server. It provides a native libra
 
 * **Direct Catalog Browsing**: Explore your entire Komga server—including libraries, recently added, and on-deck books—with cover thumbnails, list or grid views, and read status filters.
 * **Hands-Free Syncing**: Keep your reading progress in sync directly with your Komga server, without needing to configure it as a KOSync server.
-* **Smart Next-Chapter Transition**: When you turn the last page, the plugin can instantly open the next book if it's already on your device, or download and open it automatically over Wi-Fi.
+* **Background Pre-Downloading & Seamless Transitions**: Pre-download the next $N$ chapters sequentially in the background while reading (zero lag). Optionally toggle `Skip end-of-book prompt` to directly open the next book as soon as you finish the current one for an uninterrupted reading flow.
+* **KOReader Gestures & Actions**: Registered manual sync and library browsing as global KOReader actions, allowing you to bind them to tap gestures, keyboard shortcuts, or hardware keys.
 * **Automatic Book & Folder Metadata**: Downloads automatically fetch rich metadata (authors, summaries, and series indexes) and save folder cover art for file browser plugins.
 * **Bulk Downloads**: Easily queue multiple books or download all remaining unread books in a series directly from the browser view.
 * **Auto RTL for Manga**: Automatically sets your reading layout to Right-to-Left (RTL) when opening manga matched with your Komga server.
