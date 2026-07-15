@@ -1045,7 +1045,8 @@ function KomgaSync:downloadSeriesCoverIfMissing(book, final_dir, series_title)
 end
 
 function KomgaSync:preDownloadNextBook(filepath)
-    if not self.plugin.settings.auto_download_next then
+    local download_count = self.plugin.settings.auto_download_next or 0
+    if download_count <= 0 then
         logger.info("KomgaSync: auto_download_next is disabled, skipping pre-download")
         return
     end
@@ -1080,40 +1081,64 @@ function KomgaSync:preDownloadNextBook(filepath)
     -- Call runInSubProcess with_pipe = true
     local pid, parent_read_fd = ffiutil.runInSubProcess(function(pid, child_write_fd)
         local success, result = pcall(function()
-            local next_book = self.plugin.api:get_next_book(book_id)
-            if not next_book then
-                return { status = "no_next" }
+            local current_id = book_id
+            local downloaded_books = {}
+            local already_downloaded_count = 0
+            local errors = {}
+
+            for step = 1, download_count do
+                local next_book = self.plugin.api:get_next_book(current_id)
+                if not next_book then
+                    logger.info("KomgaSync bg: No next chapter found after book ID " .. tostring(current_id))
+                    break
+                end
+
+                local series_title = next_book.seriesTitle
+                local local_path, filename = self:getBookLocalPath(next_book, series_title)
+                if not local_path then
+                    table.insert(errors, "No download path available for " .. tostring(next_book.name))
+                    break
+                end
+
+                local lfs = require("libs/libkoreader-lfs")
+                if lfs.attributes(local_path, "mode") == "file" then
+                    already_downloaded_count = already_downloaded_count + 1
+                    current_id = next_book.id
+                else
+                    -- Start downloading
+                    local tmp_path = local_path .. ".part"
+                    local util = require("util")
+                    local final_dir = local_path:match("(.*)/[^/]+")
+                    util.makePath(final_dir .. "/")
+
+                    logger.info("KomgaSync bg: Downloading book " .. next_book.id .. " in background to " .. tmp_path)
+                    local dl_success, dl_err = self.plugin.api:download_book(next_book.id, tmp_path)
+                    if dl_success then
+                        pcall(save_book_metadata, local_path, next_book, series_title)
+                        local os = require("os")
+                        os.rename(tmp_path, local_path)
+                        self:downloadSeriesCoverIfMissing(next_book, final_dir, series_title)
+                        logger.info("KomgaSync bg: Finished downloading next chapter: " .. local_path)
+                        table.insert(downloaded_books, {
+                            local_path = local_path,
+                            next_book_id = next_book.id,
+                            filename = filename
+                        })
+                        current_id = next_book.id
+                    else
+                        logger.err("KomgaSync bg: Failed to download book " .. next_book.id .. ": " .. tostring(dl_err))
+                        table.insert(errors, tostring(dl_err))
+                        break -- stop downloading subsequent ones if one fails
+                    end
+                end
             end
 
-            local series_title = next_book.seriesTitle
-            local local_path, filename = self:getBookLocalPath(next_book, series_title)
-            if not local_path then
-                return { status = "error", message = "No download path available" }
-            end
-
-            local lfs = require("libs/libkoreader-lfs")
-            if lfs.attributes(local_path, "mode") == "file" then
-                return { status = "already_downloaded", local_path = local_path, next_book_id = next_book.id, filename = filename }
-            end
-
-            -- Start downloading
-            local tmp_path = local_path .. ".part"
-            local util = require("util")
-            local final_dir = local_path:match("(.*)/[^/]+")
-            util.makePath(final_dir .. "/")
-
-            logger.info("KomgaSync bg: Downloading next chapter in background to " .. tmp_path)
-            local dl_success, dl_err = self.plugin.api:download_book(next_book.id, tmp_path)
-            if dl_success then
-                pcall(save_book_metadata, local_path, next_book, series_title)
-                local os = require("os")
-                os.rename(tmp_path, local_path)
-                self:downloadSeriesCoverIfMissing(next_book, final_dir, series_title)
-                logger.info("KomgaSync bg: Finished downloading next chapter: " .. local_path)
-                return { status = "downloaded", local_path = local_path, next_book_id = next_book.id, filename = filename }
-            else
-                return { status = "error", message = tostring(dl_err) }
-            end
+            return {
+                status = "success",
+                downloaded = downloaded_books,
+                already_downloaded = already_downloaded_count,
+                errors = errors
+            }
         end)
 
         local JSON = require("json")
@@ -1143,7 +1168,7 @@ function KomgaSync:preDownloadNextBook(filepath)
 
     if not self.bg_collector_scheduled then
         self.bg_collector_scheduled = true
-        UIManager:scheduleIn(5, function()
+        UIManager:scheduleIn(1, function()
             self:collectBgDownloads()
         end)
     end
@@ -1175,39 +1200,46 @@ function KomgaSync:collectBgDownloads()
             local JSON = require("json")
             local ok, result = pcall(JSON.decode, ret_str)
             if ok and result and type(result) == "table" then
-                if result.status == "downloaded" then
-                    -- Download succeeded!
-                    -- Update matched_books_cache in the parent process
-                    self.plugin.settings.matched_books_cache[result.local_path] = result.next_book_id
-                    self.plugin:saveSettings()
+                if result.status == "success" then
+                    if result.downloaded and #result.downloaded > 0 then
+                        for _, item in ipairs(result.downloaded) do
+                            -- Update matched_books_cache in the parent process
+                            self.plugin.settings.matched_books_cache[item.local_path] = item.next_book_id
+                        end
+                        self.plugin:saveSettings()
 
-                    -- Show a silent info toast/notification to the user
-                    local T = self.plugin.i18n.T
-                    local _ = self.plugin.i18n._
-                    self.plugin:notify(T(_("Next chapter downloaded in background: %1"), result.filename), "info")
+                        -- Show silent info toast/notification to the user
+                        local T = self.plugin.i18n.T
+                        local _ = self.plugin.i18n._
+                        if #result.downloaded == 1 then
+                            self.plugin:notify(T(_("Next chapter downloaded in background: %1"), result.downloaded[1].filename), "info")
+                        else
+                            self.plugin:notify(T(_("Downloaded %1 next chapters in background"), #result.downloaded), "info")
+                        end
 
-                    -- Trigger UI refresh if FileManager is open
-                    UIManager:nextTick(function()
-                        pcall(function()
-                            local BookInfoManager = require("plugins/coverbrowser.koplugin/bookinfomanager")
-                            if BookInfoManager and BookInfoManager.deleteBookInfo then
-                                BookInfoManager:deleteBookInfo(result.local_path)
+                        -- Trigger UI refresh if FileManager is open
+                        UIManager:nextTick(function()
+                            pcall(function()
+                                local BookInfoManager = require("plugins/coverbrowser.koplugin/bookinfomanager")
+                                if BookInfoManager and BookInfoManager.deleteBookInfo then
+                                    for _, item in ipairs(result.downloaded) do
+                                        BookInfoManager:deleteBookInfo(item.local_path)
+                                    end
+                                end
+                            end)
+                            local ok2, FileManager = pcall(require, "apps/filemanager/filemanager")
+                            if ok2 and FileManager.instance then
+                                if FileManager.instance.file_chooser and FileManager.instance.file_chooser.resetBookInfoCache then
+                                    for _, item in ipairs(result.downloaded) do
+                                        pcall(function() FileManager.instance.file_chooser.resetBookInfoCache(item.local_path) end)
+                                    end
+                                end
+                                FileManager.instance:onRefresh()
                             end
                         end)
-                        local ok2, FileManager = pcall(require, "apps/filemanager/filemanager")
-                        if ok2 and FileManager.instance then
-                            if FileManager.instance.file_chooser and FileManager.instance.file_chooser.resetBookInfoCache then
-                                pcall(function() FileManager.instance.file_chooser.resetBookInfoCache(result.local_path) end)
-                            end
-                            FileManager.instance:onRefresh()
-                        end
-                    end)
-                elseif result.status == "already_downloaded" then
-                    logger.info("KomgaSync: Next chapter was already downloaded: " .. tostring(result.local_path))
-                    self.plugin.settings.matched_books_cache[result.local_path] = result.next_book_id
-                    self.plugin:saveSettings()
-                elseif result.status == "no_next" then
-                    logger.info("KomgaSync: Background check completed - no next chapter exists.")
+                    else
+                        logger.info("KomgaSync: Background check completed - no new chapters downloaded (already downloaded: " .. tostring(result.already_downloaded) .. ")")
+                    end
                 elseif result.status == "error" then
                     logger.warn("KomgaSync: Background pre-download failed: " .. tostring(result.message))
                 end
@@ -1225,7 +1257,7 @@ function KomgaSync:collectBgDownloads()
 
     if #self.bg_processes > 0 then
         -- Schedule the next check
-        UIManager:scheduleIn(5, function()
+        UIManager:scheduleIn(1, function()
             self:collectBgDownloads()
         end)
     else

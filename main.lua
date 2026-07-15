@@ -59,7 +59,7 @@ local DEFAULT_SETTINGS = {
     download_dir = "",
     download_to_subfolder = true,
     auto_rtl_direction = false,
-    auto_download_next = false
+    auto_download_next = 0
 }
 
 function KomgaPlugin:init()
@@ -215,7 +215,7 @@ function KomgaPlugin:onReaderReady()
         end
     end
 
-    if self.settings.auto_download_next then
+    if self.settings.auto_download_next and self.settings.auto_download_next > 0 then
         self.sync:preDownloadNextBook(filepath)
     end
     

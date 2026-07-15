@@ -102,12 +102,19 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
-                    text = _("Pre-download next chapter"),
-                    checked_func = function() return self.plugin.settings.auto_download_next end,
+                    text_func = function()
+                        local count = self.plugin.settings.auto_download_next or 0
+                        if count == 0 then
+                            return _("Pre-download next chapters: Disabled")
+                        elseif count == 1 then
+                            return _("Pre-download next chapters: 1 chapter")
+                        else
+                            return T(_("Pre-download next chapters: %1 chapters"), count)
+                        end
+                    end,
                     keep_menu_open = true,
                     callback = function()
-                        self.plugin.settings.auto_download_next = not self.plugin.settings.auto_download_next
-                        self.plugin:saveSettings()
+                        self:promptInput(_("Pre-download next chapters (0 to disable)"), "auto_download_next", true)
                     end
                 },
                 {
