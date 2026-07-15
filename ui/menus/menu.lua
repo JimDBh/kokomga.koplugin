@@ -70,11 +70,6 @@ function KomgaMenu:createSettingsMenu()
         sub_item_table_func = function()
             return {
                 {
-                    text = _("Custom Download Dir"),
-                    keep_menu_open = true,
-                    callback = function() self:promptInput(_("Custom Download Dir"), "download_dir") end
-                },
-                {
                     text = _("Use Komga server progress when available"),
                     checked_func = function() return self.plugin.settings.use_komga_sync end,
                     keep_menu_open = true,
@@ -89,15 +84,6 @@ function KomgaMenu:createSettingsMenu()
                     keep_menu_open = true,
                     callback = function()
                         self.plugin.settings.auto_rtl_direction = not self.plugin.settings.auto_rtl_direction
-                        self.plugin:saveSettings()
-                    end
-                },
-                {
-                    text = _("Download into Series Subfolders"),
-                    checked_func = function() return self.plugin.settings.download_to_subfolder end,
-                    keep_menu_open = true,
-                    callback = function()
-                        self.plugin.settings.download_to_subfolder = not self.plugin.settings.download_to_subfolder
                         self.plugin:saveSettings()
                     end
                 },
@@ -123,6 +109,20 @@ function KomgaMenu:createSettingsMenu()
                     keep_menu_open = true,
                     callback = function()
                         self.plugin.settings.skip_end_of_book_prompt = not self.plugin.settings.skip_end_of_book_prompt
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
+                    text = _("Custom Download Dir"),
+                    keep_menu_open = true,
+                    callback = function() self:promptInput(_("Custom Download Dir"), "download_dir") end
+                },
+                {
+                    text = _("Download into Series Subfolders"),
+                    checked_func = function() return self.plugin.settings.download_to_subfolder end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.download_to_subfolder = not self.plugin.settings.download_to_subfolder
                         self.plugin:saveSettings()
                     end
                 },
