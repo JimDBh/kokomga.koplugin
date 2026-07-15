@@ -744,6 +744,56 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
     
     local _ = self.plugin.i18n._
     local T = self.plugin.i18n.T
+
+    -- Check if there is an active background process pre-downloading
+    local is_bg_downloading = false
+    local bg_proc = nil
+    if self.bg_processes and #self.bg_processes > 0 then
+        bg_proc = self.bg_processes[1]
+        is_bg_downloading = true
+    end
+
+    if is_bg_downloading and bg_proc then
+        logger.info("KomgaSync: Next book is already downloading in background (PID: " .. tostring(bg_proc.pid) .. "). Polling it.")
+        self.plugin:notify(T(_("Finishing background download of %1..."), filename), "info")
+        
+        local lfs = require("libs/libkoreader-lfs")
+        local UIManager = require("ui/uimanager")
+
+        local function check_ready()
+            if lfs.attributes(local_path, "mode") == "file" then
+                logger.info("KomgaSync: Background download completed successfully. Opening: " .. local_path)
+                if on_success_callback then
+                    UIManager:nextTick(function()
+                        on_success_callback(local_path)
+                    end)
+                end
+            else
+                -- Check if the process is still in our active list
+                local still_active = false
+                for _, proc in ipairs(self.bg_processes) do
+                    if proc.pid == bg_proc.pid then
+                        still_active = true
+                        break
+                    end
+                end
+                
+                if not still_active then
+                    logger.err("KomgaSync: Background download subprocess failed or was cancelled.")
+                    if on_failure_callback then
+                        UIManager:nextTick(function()
+                            on_failure_callback("Background download failed")
+                        end)
+                    end
+                else
+                    -- Still running, check again in 1 second
+                    UIManager:scheduleIn(1, check_ready)
+                end
+            end
+        end
+        UIManager:scheduleIn(1, check_ready)
+        return
+    end
     
     local util = require("util")
     local final_dir = local_path:match("(.*)/[^/]+")
@@ -1073,15 +1123,13 @@ function KomgaSync:preDownloadNextBook(filepath)
         return
     end
 
-    -- Check if we are already downloading for this book_id
+    -- Limit to 1 background pre-download subprocess at a time
     if not self.bg_processes then
         self.bg_processes = {}
     end
-    for _, proc in ipairs(self.bg_processes) do
-        if proc.current_book_id == book_id then
-            logger.info("KomgaSync: Already checking/downloading next book for current book:", book_id)
-            return
-        end
+    if #self.bg_processes > 0 then
+        logger.info("KomgaSync: A background pre-download is already active. Skipping new spawn.")
+        return
     end
 
     local ffiutil = require("ffi/util")
@@ -1255,6 +1303,19 @@ function KomgaSync:collectBgDownloads()
                 end
             else
                 logger.err("KomgaSync: Failed to parse result from background download subprocess. Error: " .. tostring(result) .. " | Raw Input: " .. tostring(ret_str))
+            end
+
+            -- Check if the user has switched chapters/books during the download.
+            -- If so, trigger a new pre-download window check for the currently active book.
+            local current_filepath = self.plugin.ui and self.plugin.ui.document and self.plugin.ui.document.file
+            if current_filepath then
+                local current_book_id = self:getOrMatchBook(current_filepath)
+                if current_book_id and current_book_id ~= proc.current_book_id then
+                    logger.info("KomgaSync: User switched book during pre-download. Cascade triggering for new book.")
+                    UIManager:nextTick(function()
+                        self:preDownloadNextBook(current_filepath)
+                    end)
+                end
             end
         else
             local elapsed = os.time() - proc.start_time
