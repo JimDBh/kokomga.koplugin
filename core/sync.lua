@@ -915,6 +915,16 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
     local is_downloaded = (lfs.attributes(local_path, "mode") == "file")
 
     local UIManager = require("ui/uimanager")
+
+    if self.plugin.settings.skip_end_of_book_prompt and is_downloaded then
+        logger.info("KomgaSync: skip_end_of_book_prompt is enabled, opening next book directly: " .. tostring(local_path))
+        UIManager:nextTick(function()
+            local filemanagerutil = require("apps/filemanager/filemanagerutil")
+            filemanagerutil.openFile(ui, local_path)
+        end)
+        return true
+    end
+
     local Event = require("ui/event")
     
     local title = next_book.metadata and next_book.metadata.title or next_book.name or "Untitled"

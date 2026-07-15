@@ -59,7 +59,8 @@ local DEFAULT_SETTINGS = {
     download_dir = "",
     download_to_subfolder = true,
     auto_rtl_direction = false,
-    auto_download_next = 0
+    auto_download_next = 0,
+    skip_end_of_book_prompt = false
 }
 
 function KomgaPlugin:init()

@@ -118,6 +118,15 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    text = _("Skip end-of-book prompt (directly open next book)"),
+                    checked_func = function() return self.plugin.settings.skip_end_of_book_prompt end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.skip_end_of_book_prompt = not self.plugin.settings.skip_end_of_book_prompt
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
                     text = _("Layout Options"),
                     keep_menu_open = true,
                     sub_item_table_func = function()
