@@ -354,8 +354,12 @@ function KomgaListMenu:_recalculateDimen()
     if has_covers then
         self.perpage = configured_rows
         self.item_height = math.floor(available_height / self.perpage)
+    elseif self.no_cover_rows then
+        local min_item_height = Screen:scaleBySize(48)
+        local rows_that_fit = math.max(1, math.floor(available_height / min_item_height))
+        self.perpage = math.min(self.no_cover_rows, rows_that_fit)
+        self.item_height = math.floor(available_height / self.perpage)
     else
-        -- No-cover mode: Use a consistent height matching the home page (6 items) or configured_rows
         self.perpage = math.max(6, configured_rows)
         self.item_height = math.floor(available_height / self.perpage)
     end

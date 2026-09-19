@@ -715,7 +715,7 @@ function KomgaSync:getBookLocalPath(book, series_title)
     filename = filename:gsub('[/%\\%:%*%?%"%<%>%|]', '_')
     local download_dir = self.plugin:getDownloadDir()
     if not download_dir then return nil, nil end
-    if self.plugin.settings.download_to_subfolder and series_title then
+    if self.plugin.settings.download_to_subfolder and series_title and book.oneshot ~= true then
         local clean_series = series_title:gsub('[/%\\%:%*%?%"%<%>%|]', '_')
         download_dir = download_dir .. "/" .. clean_series
     end
@@ -1037,7 +1037,7 @@ function KomgaSync:downloadSeriesCoverIfMissing(book, final_dir, series_title)
     if not self.plugin.api then return end
     
     -- Check if we are downloading to a subdir of the series
-    local is_subdir = self.plugin.settings.download_to_subfolder and series_title and series_title ~= ""
+    local is_subdir = self.plugin.settings.download_to_subfolder and series_title and series_title ~= "" and book.oneshot ~= true
     if not is_subdir then
         return
     end

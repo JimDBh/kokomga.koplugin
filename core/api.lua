@@ -255,6 +255,23 @@ function KomgaAPI:get_books(filters, page, size)
     return self:request("/api/v1/books" .. query)
 end
 
+function KomgaAPI:get_one_shots()
+    local body = {
+        condition = {
+            oneShot = { operator = "isTrue" }
+        }
+    }
+    return self:request("/api/v1/books/list?unpaged=true", "POST", body)
+end
+
+function KomgaAPI:get_latest_books(page, size)
+    local params = {}
+    if page then table.insert(params, "page=" .. tostring(page)) end
+    if size then table.insert(params, "size=" .. tostring(size)) end
+    local q = #params > 0 and ("?" .. table.concat(params, "&")) or ""
+    return self:request("/api/v1/books/latest" .. q)
+end
+
 function KomgaAPI:get_books_ondeck(page, size)
     local params = {}
     if page then table.insert(params, "page=" .. tostring(page)) end
@@ -269,6 +286,22 @@ function KomgaAPI:get_new_series(page, size)
     if size then table.insert(params, "size=" .. tostring(size)) end
     local q = #params > 0 and ("?" .. table.concat(params, "&")) or ""
     return self:request("/api/v1/series/new" .. q)
+end
+
+function KomgaAPI:get_collections(page, size)
+    local params = {}
+    if page then table.insert(params, "page=" .. tostring(page)) end
+    if size then table.insert(params, "size=" .. tostring(size)) end
+    local q = #params > 0 and ("?" .. table.concat(params, "&")) or ""
+    return self:request("/api/v1/collections" .. q)
+end
+
+function KomgaAPI:get_series_for_collection(collection_id, page, size)
+    local params = {}
+    if page then table.insert(params, "page=" .. tostring(page)) end
+    if size then table.insert(params, "size=" .. tostring(size)) end
+    local q = #params > 0 and ("?" .. table.concat(params, "&")) or ""
+    return self:request("/api/v1/collections/" .. escape_uri(collection_id) .. "/series" .. q)
 end
 
 -- Get the next book in the series after book_id (404 = no next book → returns nil)

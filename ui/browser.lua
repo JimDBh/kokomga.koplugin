@@ -2,7 +2,133 @@ local Menu = require("ui/widget/menu")
 local KomgaListMenu = require("ui/menus/list_menu")
 local KomgaGridMenu = require("ui/menus/grid_menu")
 local UIManager = require("ui/uimanager")
+local Utf8Proc = require("ffi/utf8proc")
+local ffiUtil = require("ffi/util")
 local logger = require("logger")
+
+local function getBookTitle(book)
+    return book.metadata and book.metadata.title or book.name or ""
+end
+
+local function nextUtf8Char(text, index)
+    local first_byte = text:byte(index)
+    if not first_byte then return nil, index end
+    local length = 1
+    if first_byte >= 0xF0 then
+        length = 4
+    elseif first_byte >= 0xE0 then
+        length = 3
+    elseif first_byte >= 0xC0 then
+        length = 2
+    end
+    return text:sub(index, index + length - 1), index + length
+end
+
+local LATIN_BASE = {}
+
+local function addLatinMapping(characters, replacement)
+    local index = 1
+    while index <= #characters do
+        local character
+        character, index = nextUtf8Char(characters, index)
+        LATIN_BASE[ffiUtil.utf8charcode(character)] = replacement
+    end
+end
+
+addLatinMapping("àáâãäåāăąǎǟǡǻȁȃạảấầẩẫậắằẳẵặ", "a")
+addLatinMapping("æǣǽ", "ae")
+addLatinMapping("çćĉċč", "c")
+addLatinMapping("ďđðḋḍḏḑḓ", "d")
+addLatinMapping("èéêëēĕėęěȅȇẹẻẽếềểễệ", "e")
+addLatinMapping("ĝğġģǧǵḡ", "g")
+addLatinMapping("ĥħȟḣḥḧḩḫ", "h")
+addLatinMapping("ìíîïĩīĭįıǐȉȋịỉ", "i")
+addLatinMapping("ĵǰ", "j")
+addLatinMapping("ķǩḱḳḵ", "k")
+addLatinMapping("ĺļľŀłḷḹḻḽ", "l")
+addLatinMapping("ñńņňŉŋǹṅṇṉṋ", "n")
+addLatinMapping("òóôõöøōŏőơǒǿȍȏọỏốồổỗộớờởỡợ", "o")
+addLatinMapping("œ", "oe")
+addLatinMapping("ŕŗřȑȓṙṛṝṟ", "r")
+addLatinMapping("śŝşšșṡṣṥṧṩ", "s")
+addLatinMapping("ţťŧțṫṭṯṱ", "t")
+addLatinMapping("þ", "th")
+addLatinMapping("ùúûüũūŭůűųưǔǖǘǚǜȕȗụủứừửữự", "u")
+addLatinMapping("ŵẁẃẅẇẉ", "w")
+addLatinMapping("ýÿŷȳẏỳỵỷỹ", "y")
+addLatinMapping("źżžẑẓẕ", "z")
+
+local function isSymbolOrPunctuation(codepoint)
+    return codepoint <= 0x20
+        or (codepoint >= 0x21 and codepoint <= 0x2F)
+        or (codepoint >= 0x3A and codepoint <= 0x40)
+        or (codepoint >= 0x5B and codepoint <= 0x60)
+        or (codepoint >= 0x7B and codepoint <= 0xBF and codepoint ~= 0xAA and codepoint ~= 0xB5 and codepoint ~= 0xBA)
+        or (codepoint >= 0x2000 and codepoint <= 0x2BFF)
+        or (codepoint >= 0x2E00 and codepoint <= 0x303F)
+        or (codepoint >= 0xFE10 and codepoint <= 0xFE6F)
+        or (codepoint >= 0xFF01 and codepoint <= 0xFF20)
+        or (codepoint >= 0xFF3B and codepoint <= 0xFF40)
+        or (codepoint >= 0xFF5B and codepoint <= 0xFF65)
+        or (codepoint >= 0x1F000 and codepoint <= 0x1FBFF)
+end
+
+local function appendSortToken(tokens, codepoint)
+    local bucket = 2
+    if isSymbolOrPunctuation(codepoint) then
+        bucket = 0
+    elseif codepoint >= 0x30 and codepoint <= 0x39 then
+        bucket = 1
+    end
+    table.insert(tokens, string.format("%d%06x", bucket, codepoint))
+end
+
+local function getVisibleTitleSortKey(title)
+    local folded_title = Utf8Proc.lowercase(title)
+    local tokens = {}
+    local index = 1
+    while index <= #folded_title do
+        local character
+        character, index = nextUtf8Char(folded_title, index)
+        local codepoint = ffiUtil.utf8charcode(character)
+        local base = LATIN_BASE[codepoint]
+        if base then
+            for i = 1, #base do
+                appendSortToken(tokens, base:byte(i))
+            end
+        else
+            appendSortToken(tokens, codepoint)
+        end
+    end
+    return table.concat(tokens), folded_title
+end
+
+local function sortBooksByVisibleTitle(books)
+    local sorted = {}
+    for index, book in ipairs(books) do
+        local title = getBookTitle(book)
+        local key, folded_title = getVisibleTitleSortKey(title)
+        table.insert(sorted, {
+            book = book,
+            title = title,
+            folded_title = folded_title,
+            key = key,
+            index = index,
+        })
+    end
+    table.sort(sorted, function(a, b)
+        if a.key ~= b.key then return a.key < b.key end
+        if a.folded_title ~= b.folded_title then return a.folded_title < b.folded_title end
+        if a.title ~= b.title then return a.title < b.title end
+        local a_id = tostring(a.book.id or "")
+        local b_id = tostring(b.book.id or "")
+        if a_id ~= b_id then return a_id < b_id end
+        return a.index < b.index
+    end)
+    for index, entry in ipairs(sorted) do
+        books[index] = entry.book
+    end
+end
 
 -- Capture base class methods once so setViewMode wrapping never double-wraps
 local _base_list_recalc = KomgaListMenu._recalculateDimen
@@ -177,6 +303,7 @@ function KomgaBrowser:init()
     self.catalog_title = "Komga"
     self.title = "Komga"
     self.item_table = self:getHomeItemTable()
+    self.no_cover_rows = #self.item_table
     
     self.title_bar_left_icon = "search"
     self.onLeftButtonTap = function() end
@@ -234,6 +361,7 @@ function KomgaBrowser:autoSetViewMode(item_table)
     end
     
     local is_home = (#self.paths == 0)
+    self.no_cover_rows = is_home and #item_table or nil
     if is_home or not has_covers then
         self:setViewMode("list", false)
     else
@@ -462,6 +590,55 @@ function KomgaBrowser:_loadCatalog(args)
     self:pushCatalog(args.title and _(args.title) or "", item_table, push_opts)
 end
 
+-- Loads a complete client-side catalog while exposing it to the menu one page
+-- at a time. This permits global client-side sorting without prefetching every
+-- cover or changing the normal server-backed pagination path.
+function KomgaBrowser:_loadLocalCatalog(args)
+    local _ = self.plugin.i18n._
+    local response = args.fetch_func()
+    local content = type(response) == "table" and (response.content or response) or {}
+    if args.sort_func then
+        args.sort_func(content)
+    end
+
+    local function buildPage(page, size)
+        local page_content = {}
+        local first = page * size + 1
+        local last = math.min(#content, first + size - 1)
+        for index = first, last do
+            table.insert(page_content, content[index])
+        end
+        if args.cover_type then
+            self.plugin.cache:prefetchCovers(page_content, args.cover_type)
+        end
+
+        local items = {}
+        for _, entry in ipairs(page_content) do
+            local item = args.item_builder(entry)
+            if item then table.insert(items, item) end
+        end
+        return items
+    end
+
+    local page_size = self:getPageSize(args.cover_type ~= nil)
+    local item_table = buildPage(0, page_size)
+    local push_opts = args.push_opts or {}
+    if #item_table == 0 then
+        table.insert(item_table, { text = args.empty_text and _(args.empty_text) or _("Nothing found") })
+    elseif #content > page_size then
+        push_opts._pagination = {
+            loader = buildPage,
+            server_page = 0,
+            total_pages = math.ceil(#content / page_size),
+            total_elements = #content,
+            has_covers = (args.cover_type ~= nil),
+            page_size = page_size,
+        }
+    end
+
+    self:pushCatalog(args.title and _(args.title) or "", item_table, push_opts)
+end
+
 -- ---------------------------------------------------------------------------
 -- Home screen
 -- ---------------------------------------------------------------------------
@@ -473,6 +650,8 @@ function KomgaBrowser:getHomeItemTable()
         { text = _("On Deck"),               callback = function() self:showOnDeck() end },
         { text = _("Recently Added Series"), callback = function() self:showRecentSeries() end },
         { text = _("Recently Added Books"),  callback = function() self:showRecentBooks() end },
+        { text = _("One-Shots"),              callback = function() self:showOneShots() end },
+        { text = _("Collections"),            callback = function() self:showCollections() end },
         { text = _("All Series"),            callback = function() self:showAllSeries() end },
         { text = _("Libraries"),             callback = function() self:showLibraries() end },
     }
@@ -546,7 +725,7 @@ function KomgaBrowser:showRecentBooks()
     self:_loadCatalog{
         title = "Recently Added Books",
         fetch_func = function(page, size)
-            return self.plugin.api:get_books({sort = "createdDate,desc"}, page, size)
+            return self.plugin.api:get_latest_books(page, size)
         end,
         item_builder = function(book)
             return {
@@ -559,6 +738,63 @@ function KomgaBrowser:showRecentBooks()
         end,
         cover_type = "book",
         empty_text = "No recent books found",
+    }
+end
+
+function KomgaBrowser:showOneShots()
+    if not self.plugin.api then return end
+    self:_loadLocalCatalog{
+        title = "One-Shots",
+        fetch_func = function() return self.plugin.api:get_one_shots() end,
+        sort_func = sortBooksByVisibleTitle,
+        item_builder = function(book)
+            return {
+                text = getBookTitle(book),
+                callback = function() self:onBookSelect(book) end,
+                cover_id = book.id,
+                cover_type = "book",
+                book = book,
+            }
+        end,
+        cover_type = "book",
+        empty_text = "No one-shots found",
+    }
+end
+
+function KomgaBrowser:showCollections()
+    if not self.plugin.api then return end
+    self:_loadCatalog{
+        title = "Collections",
+        fetch_func = function(page, size) return self.plugin.api:get_collections(page, size) end,
+        item_builder = function(collection)
+            return {
+                text = collection.name,
+                callback = function() self:showSeriesInCollection(collection.id, collection.name) end,
+            }
+        end,
+        empty_text = "No collections found",
+    }
+end
+
+function KomgaBrowser:showSeriesInCollection(collection_id, collection_name)
+    if not self.plugin.api then return end
+    self:_loadCatalog{
+        title = collection_name,
+        fetch_func = function(page, size)
+            return self.plugin.api:get_series_for_collection(collection_id, page, size)
+        end,
+        item_builder = function(series)
+            local title = series.metadata and series.metadata.title or series.name
+            return {
+                text = title,
+                callback = function() self:showBooksInSeries(series.id, title) end,
+                cover_id = series.id,
+                cover_type = "series",
+                series = series,
+            }
+        end,
+        cover_type = "series",
+        empty_text = "No series in collection",
     }
 end
 
