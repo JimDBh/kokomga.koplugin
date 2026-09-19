@@ -60,8 +60,27 @@ local DEFAULT_SETTINGS = {
     download_to_subfolder = true,
     auto_rtl_direction = false,
     auto_download_next = 0,
-    skip_end_of_book_prompt = false
+    skip_end_of_book_prompt = false,
+    disable_readest_sync_for_komga = false
 }
+
+-- Readest's per-book sync entry points. Everything here acts on the currently
+-- open document, so it is in scope for "Disable Readest sync for Komga books".
+-- syncBooksLibrary is deliberately absent: it is a library-wide push/pull the
+-- user invokes explicitly, not background per-book sync.
+local READEST_PER_BOOK_METHODS = {
+    "pushBookConfig", "pullBookConfig",
+    "pushBookStats",  "pullBookStats",
+    "pushBookNotes",  "pullBookNotes",
+    "touchOpenBook",  "pushOpenBook",
+}
+
+-- Readest stores progress as the string "[current,total]".
+local function readestProgressTotal(progress)
+    if type(progress) ~= "string" then return nil end
+    local _current, total = progress:match("^%[(%d+),(%d+)%]$")
+    return tonumber(total)
+end
 
 function KomgaPlugin:init()
     logger.info("KomgaPlugin: Initializing...")
@@ -173,6 +192,130 @@ function KomgaPlugin:getDownloadDir()
     return nil
 end
 
+-- Readest identifies a book by the partial MD5 stored in its sidecar. When we
+-- auto-open the next chapter, Readest has been observed issuing a pull under the
+-- *previous* chapter's identity and applying the answer to the chapter now on
+-- screen, which drags every new chapter to its last page. Validate the config
+-- against the open document before Readest gets to act on it.
+--
+-- Installed once per session: applyBookConfig lives on Readest's shared
+-- SyncConfig module, not on a per-document instance. The live plugin is reached
+-- through ui.kokomga so the wrapper never holds a stale reference.
+function KomgaPlugin:installReadestGuard()
+    if KomgaPlugin._readest_guard_installed then return end
+
+    local ok, SyncConfig = pcall(require, "readest_syncconfig")
+    if not ok or type(SyncConfig) ~= "table" or type(SyncConfig.applyBookConfig) ~= "function" then
+        logger.info("KomgaPlugin: Readest guard not installed (readest_syncconfig unavailable)")
+        return
+    end
+    KomgaPlugin._readest_guard_installed = true
+
+    local orig_applyBookConfig = SyncConfig.applyBookConfig
+
+    SyncConfig.applyBookConfig = function(sync_config, ui, config)
+        local blocked = false
+
+        pcall(function()
+            if type(config) ~= "table" then return end
+
+            -- Validate against the reader the user is actually looking at, not
+            -- against the ui we were handed: the observed failure applies a config
+            -- carried by the outgoing chapter's ui while the page jump lands on the
+            -- live reader, so trusting ui.document here would check the wrong book.
+            local ReaderUI = require("apps/reader/readerui")
+            local live = ReaderUI.instance
+            if not (live and live.document) then return end
+
+            local plugin = live.kokomga
+            if not (plugin and plugin.sync) then return end
+
+            local file = live.document.file
+            if not file then return end
+            -- Not a Komga book: Readest's business, not ours.
+            if not plugin.sync:getOrMatchBook(file) then return end
+
+            -- A config arriving through a ui that is no longer the live reader
+            -- belongs to a document that has already been closed. Nothing it says
+            -- can be true of the book now on screen.
+            if ui ~= live then
+                blocked = true
+                logger.info("KomgaPlugin: Blocked Readest progress applied through a stale reader (document already switched)")
+                return
+            end
+
+            -- Signal 1: page count. Readest drops the stored total on the floor,
+            -- so a config from a different-length chapter is detectable here.
+            local config_pages = readestProgressTotal(config.progress)
+            local document_pages = live.document.getPageCount and live.document:getPageCount()
+            local pages_differ = config_pages ~= nil and document_pages ~= nil
+                and config_pages ~= document_pages
+
+            -- Signal 2: file identity, recomputed from the file itself rather than
+            -- read back from doc_settings, which is one of the things that may be
+            -- carrying the outgoing chapter's data at this point.
+            local util = require("util")
+            local config_hash = config.book_hash or config.bookHash
+            local document_hash = util.partialMD5(file)
+            local hash_differs = config_hash ~= nil and document_hash ~= nil
+                and config_hash ~= document_hash
+
+            -- Both signals must agree before we refuse. A differing hash alone is
+            -- not proof of a wrong book: Readest uses meta_hash to bridge two
+            -- copies of the same book across devices, and a re-encoded file keeps
+            -- its page count while changing its hash. That resume must still apply.
+            if hash_differs and pages_differ then
+                blocked = true
+                logger.info(string.format(
+                    "KomgaPlugin: Blocked Readest progress from another book -- config %s (%s pages), open document %s (%s pages)",
+                    tostring(config_hash), tostring(config_pages),
+                    tostring(document_hash), tostring(document_pages)))
+            elseif hash_differs or pages_differ then
+                logger.info(string.format(
+                    "KomgaPlugin: Readest progress only partially matches, applying anyway (hash_differs=%s pages_differ=%s)",
+                    tostring(hash_differs), tostring(pages_differ)))
+            end
+        end)
+
+        if blocked then return end
+        return orig_applyBookConfig(sync_config, ui, config)
+    end
+
+    logger.info("KomgaPlugin: Readest applyBookConfig guard installed")
+end
+
+-- "Disable Readest sync for Komga books": no-op Readest's per-book sync for any
+-- document we manage, even when Readest auto-sync is enabled globally. Wrappers
+-- go on the per-document instance, so books we do not manage are untouched.
+function KomgaPlugin:installReadestSuppression()
+    local readest = self.ui and self.ui.readest
+    if not readest or rawget(readest, "_kokomga_wrapped") then return end
+
+    local file = self.ui.document and self.ui.document.file
+    local book_id = file and self.sync:getOrMatchBook(file)
+    if not book_id then return end
+
+    readest._kokomga_wrapped = true
+    local plugin = self
+
+    for _, name in ipairs(READEST_PER_BOOK_METHODS) do
+        local orig = readest[name]
+        if type(orig) == "function" then
+            readest[name] = function(...)
+                -- Read the setting here, not at wrap time, so toggling it takes
+                -- effect without reopening the book.
+                if plugin.settings.disable_readest_sync_for_komga then
+                    logger.dbg("KomgaPlugin: suppressed Readest " .. name .. " for Komga book")
+                    return
+                end
+                return orig(...)
+            end
+        end
+    end
+
+    logger.info("KomgaPlugin: Readest per-book sync wrappers installed for Komga book " .. tostring(book_id))
+end
+
 -- Lifecycle hooks
 function KomgaPlugin:onReaderReady()
     local ui = self.ui
@@ -266,6 +409,9 @@ function KomgaPlugin:onReaderReady()
             return self.orig_kosync_updateProgress(kosync_instance, ensure_networking, interactive, on_suspend)
         end
     end
+
+    self:installReadestGuard()
+    self:installReadestSuppression()
 end
 
 function KomgaPlugin:addToMainMenu(menu_items)

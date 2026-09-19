@@ -113,6 +113,15 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    text = _("Disable Readest sync for Komga books"),
+                    checked_func = function() return self.plugin.settings.disable_readest_sync_for_komga end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.disable_readest_sync_for_komga = not self.plugin.settings.disable_readest_sync_for_komga
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
                     text = _("Custom Download Dir"),
                     keep_menu_open = true,
                     callback = function(touchmenu_instance) self:promptInput(_("Custom Download Dir"), "download_dir", nil, touchmenu_instance) end
