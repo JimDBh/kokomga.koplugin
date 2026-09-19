@@ -691,6 +691,29 @@ local function has_valid_extension(name)
     return not matched_ext:match("^%d+$")
 end
 
+-- Cancel Readest's pending per-book sync work before we swap documents.
+-- Mirrors ReadestSync:onCloseWidget, but runs *before* the switch so a task
+-- scheduled for the outgoing chapter cannot fire against the incoming one.
+-- This narrows the window only: it cannot recall an HTTP request already in
+-- flight, nor a callback parked in NetworkMgr's rerun-when-online queue. The
+-- applyBookConfig guard in main.lua is what actually blocks the damage.
+function KomgaSync:cancelReadestPendingSync(ui)
+    local readest = ui and ui.readest
+    if not readest then return end
+
+    if readest.background_pull_task then
+        UIManager:unschedule(readest.background_pull_task)
+        readest.background_pull_task = nil
+    end
+    if readest.delayed_push_task then
+        UIManager:unschedule(readest.delayed_push_task)
+        readest.delayed_push_task = nil
+    end
+    readest.pull_pending_offline = nil
+
+    logger.info("KomgaSync: Cancelled pending Readest sync tasks before switching documents")
+end
+
 -- Get expected local path for a book
 function KomgaSync:getBookLocalPath(book, series_title)
     local filename = book.name or book.id
@@ -970,6 +993,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
         logger.info("KomgaSync: skip_end_of_book_prompt is enabled, opening next book directly: " .. tostring(local_path))
         UIManager:nextTick(function()
             local filemanagerutil = require("apps/filemanager/filemanagerutil")
+            self:cancelReadestPendingSync(ui)
             filemanagerutil.openFile(ui, local_path)
         end)
         return true
@@ -997,6 +1021,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
                             logger.info("KomgaSync: Opening next chapter:", path)
                             UIManager:nextTick(function()
                                 local filemanagerutil = require("apps/filemanager/filemanagerutil")
+                                self:cancelReadestPendingSync(ui)
                                 filemanagerutil.openFile(ui, path)
                             end)
                         end

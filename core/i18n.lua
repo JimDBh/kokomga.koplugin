@@ -136,6 +136,7 @@ local translations = {
         ["Pre-download next chapters: %1 chapters"] = "预下载后续章节：%1 章",
         ["Pre-download next chapters (0 to disable)"] = "预下载后续章节数量（输入 0 禁用）",
         ["Skip end-of-book prompt (directly open next book)"] = "跳过图书结束提示（直接打开下一本书）",
+        ["Disable Readest sync for Komga books"] = "为 Komga 书籍禁用 Readest 同步",
         ["Browse Komga library"] = "浏览 Komga 图书馆"
     }
 }
@@ -271,6 +272,7 @@ translations["zh_TW"] = {
     ["Pre-download next chapters: %1 chapters"] = "預下載後續章節：%1 章",
     ["Pre-download next chapters (0 to disable)"] = "預下載後續章節數量（輸入 0 停用）",
     ["Skip end-of-book prompt (directly open next book)"] = "跳過圖書結束提示（直接開啟下一本書）",
+    ["Disable Readest sync for Komga books"] = "為 Komga 書籍停用 Readest 同步",
     ["Browse Komga library"] = "瀏覽 Komga 圖書館"
 }
 
@@ -405,6 +407,7 @@ translations["ja"] = {
     ["Pre-download next chapters: %1 chapters"] = "次の章の事前ダウンロード: %1 章",
     ["Pre-download next chapters (0 to disable)"] = "次の章の事前ダウンロード数（0で無効化）",
     ["Skip end-of-book prompt (directly open next book)"] = "読了後の確認をスキップ（直接次の本を開く）",
+    ["Disable Readest sync for Komga books"] = "Komga の本では Readest 同期を無効にする",
     ["Browse Komga library"] = "Komgaライブラリを閲覧"
 }
 
@@ -539,6 +542,7 @@ translations["es"] = {
     ["Pre-download next chapters: %1 chapters"] = "Pre-descargar siguientes capítulos: %1 capítulos",
     ["Pre-download next chapters (0 to disable)"] = "Pre-descargar siguientes capítulos (0 para desactivar)",
     ["Skip end-of-book prompt (directly open next book)"] = "Omitir aviso de fin de libro (abrir directamente siguiente libro)",
+    ["Disable Readest sync for Komga books"] = "Desactivar la sincronización de Readest para libros de Komga",
     ["Browse Komga library"] = "Examinar biblioteca de Komga"
 }
 
