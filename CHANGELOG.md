@@ -4,6 +4,7 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-20
 ### Added
 - **Collections Browsing** (#9, thanks @Gunflame13):
   - Added a "Collections" entry to the home menu to browse Komga collections and drill into the series each one contains.
