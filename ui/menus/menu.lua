@@ -122,6 +122,28 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    -- Same result as Bookshelf's "Shelf source" picker: a
+                    -- regular Bookshelf shelf, renamed, moved or deleted there.
+                    text = _("Add Komga Shelf to Bookshelf"),
+                    keep_menu_open = true,
+                    enabled_func = function() return self.plugin.bookshelf.isAvailable() end,
+                    sub_item_table_func = function()
+                        local bookshelf = self.plugin.bookshelf
+                        local items = {}
+                        for _i, mode in ipairs(bookshelf.LIST_MODES) do
+                            items[#items + 1] = {
+                                text = bookshelf.listLabel(self.plugin, mode),
+                                callback = function()
+                                    if bookshelf.addShelf(mode) then
+                                        self.plugin:notify(_("Komga shelf added to Bookshelf."), "info")
+                                    end
+                                end
+                            }
+                        end
+                        return items
+                    end
+                },
+                {
                     text = _("Custom Download Dir"),
                     keep_menu_open = true,
                     callback = function(touchmenu_instance) self:promptInput(_("Custom Download Dir"), "download_dir", nil, touchmenu_instance) end

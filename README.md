@@ -5,6 +5,7 @@ A KOReader plugin that connects to your Komga server. It provides a native libra
 ## Highlights
 
 * **Catalog Browsing**: Explore your entire Komga server—including libraries, collections, one-shots, recently added, and on-deck books—with cover thumbnails, list or grid views, and read status filters.
+* **Bookshelf Integration**: Add Komga shelves—recently read or added series and books—to the [Bookshelf](https://github.com/AndyHazz/bookshelf.koplugin) home screen and download books straight from them.
 * **Bulk Downloads**: Easily queue multiple books or download all remaining unread books in a series directly from the browser view.
 * **Background Pre-Downloading**: Pre-download the next $N$ chapters sequentially in the background while reading. 
 * **Smart Next-Chapter Transition**: When you turn the last page, the plugin can instantly open the next book if it's already on your device, or download it over Wi-Fi and open it automatically. 

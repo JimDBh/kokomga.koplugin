@@ -4,6 +4,12 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+### Added
+- **Bookshelf Integration**:
+  - Komga is now a shelf source in the [Bookshelf](https://github.com/AndyHazz/bookshelf.koplugin) home screen plugin, showing Recently Read Series, Recently Added Series, or Recently Added Books. Add one from Bookshelf's shelf editor (**Source → Komga…**) or from **Options → Add Komga Shelf to Bookshelf**.
+  - Series open as folders inside Bookshelf. Books show their Komga cover and a tick once downloaded; tapping one that isn't downloaded offers to download it through kokomga, so progress sync and the next-chapter flow keep working.
+  - Only book details and covers are fetched. Komga shelves keep Komga's order, display as covers, and have no sort or filter options.
+
 ## [2.2.0] - 2026-09-20
 ### Added
 - **Collections Browsing** (#9, thanks @Gunflame13):

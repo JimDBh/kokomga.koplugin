@@ -137,6 +137,13 @@ local translations = {
         ["Pre-download next chapters (0 to disable)"] = "预下载后续章节数量（输入 0 禁用）",
         ["Skip end-of-book prompt (directly open next book)"] = "跳过图书结束提示（直接打开下一本书）",
         ["Disable Readest sync for Komga books"] = "为 Komga 书籍禁用 Readest 同步",
+        ["Add Komga Shelf to Bookshelf"] = "将 Komga 书架添加到 Bookshelf",
+        ["Komga shelf added to Bookshelf."] = "已将 Komga 书架添加到 Bookshelf。",
+        ["Open"] = "打开",
+        ["Close"] = "关闭",
+        ["Description"] = "简介",
+        ["Recently Read Series"] = "最近阅读的系列",
+        ["Couldn't load this book from Komga."] = "无法从 Komga 加载此书。",
         ["Browse Komga library"] = "浏览 Komga 图书馆"
     }
 }
@@ -273,6 +280,13 @@ translations["zh_TW"] = {
     ["Pre-download next chapters (0 to disable)"] = "預下載後續章節數量（輸入 0 停用）",
     ["Skip end-of-book prompt (directly open next book)"] = "跳過圖書結束提示（直接開啟下一本書）",
     ["Disable Readest sync for Komga books"] = "為 Komga 書籍停用 Readest 同步",
+    ["Add Komga Shelf to Bookshelf"] = "將 Komga 書架加入 Bookshelf",
+    ["Komga shelf added to Bookshelf."] = "已將 Komga 書架加入 Bookshelf。",
+    ["Open"] = "開啟",
+    ["Close"] = "關閉",
+    ["Description"] = "簡介",
+    ["Recently Read Series"] = "最近閱讀的系列",
+    ["Couldn't load this book from Komga."] = "無法從 Komga 載入此書。",
     ["Browse Komga library"] = "瀏覽 Komga 圖書館"
 }
 
@@ -408,6 +422,13 @@ translations["ja"] = {
     ["Pre-download next chapters (0 to disable)"] = "次の章の事前ダウンロード数（0で無効化）",
     ["Skip end-of-book prompt (directly open next book)"] = "読了後の確認をスキップ（直接次の本を開く）",
     ["Disable Readest sync for Komga books"] = "Komga の本では Readest 同期を無効にする",
+    ["Add Komga Shelf to Bookshelf"] = "Bookshelf に Komga の棚を追加",
+    ["Komga shelf added to Bookshelf."] = "Bookshelf に Komga の棚を追加しました。",
+    ["Open"] = "開く",
+    ["Close"] = "閉じる",
+    ["Description"] = "説明",
+    ["Recently Read Series"] = "最近読んだシリーズ",
+    ["Couldn't load this book from Komga."] = "Komga からこの本を読み込めませんでした。",
     ["Browse Komga library"] = "Komgaライブラリを閲覧"
 }
 
@@ -543,6 +564,13 @@ translations["es"] = {
     ["Pre-download next chapters (0 to disable)"] = "Pre-descargar siguientes capítulos (0 para desactivar)",
     ["Skip end-of-book prompt (directly open next book)"] = "Omitir aviso de fin de libro (abrir directamente siguiente libro)",
     ["Disable Readest sync for Komga books"] = "Desactivar la sincronización de Readest para libros de Komga",
+    ["Add Komga Shelf to Bookshelf"] = "Añadir estante de Komga a Bookshelf",
+    ["Komga shelf added to Bookshelf."] = "Estante de Komga añadido a Bookshelf.",
+    ["Open"] = "Abrir",
+    ["Close"] = "Cerrar",
+    ["Description"] = "Descripción",
+    ["Recently Read Series"] = "Series leídas recientemente",
+    ["Couldn't load this book from Komga."] = "No se pudo cargar este libro desde Komga.",
     ["Browse Komga library"] = "Examinar biblioteca de Komga"
 }
 

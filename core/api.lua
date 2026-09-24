@@ -304,6 +304,10 @@ function KomgaAPI:get_series_for_collection(collection_id, page, size)
     return self:request("/api/v1/collections/" .. escape_uri(collection_id) .. "/series" .. q)
 end
 
+function KomgaAPI:get_book(book_id)
+    return self:request("/api/v1/books/" .. escape_uri(book_id))
+end
+
 -- Get the next book in the series after book_id (404 = no next book → returns nil)
 function KomgaAPI:get_next_book(book_id)
     return self:request("/api/v1/books/" .. escape_uri(book_id) .. "/next")

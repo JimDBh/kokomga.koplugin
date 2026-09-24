@@ -28,6 +28,7 @@ local KomgaAPI = require(plugin_dir .. "core/api")
 local KomgaCache = require(plugin_dir .. "core/cache")
 local KomgaSync = require(plugin_dir .. "core/sync")
 local KomgaMenu = require(plugin_dir .. "ui/menus/menu")
+local KomgaBookshelf = require(plugin_dir .. "core/bookshelf")
 local i18n = require(plugin_dir .. "core/i18n")
 
 local KomgaPlugin = WidgetContainer:extend{
@@ -93,9 +94,14 @@ function KomgaPlugin:init()
     self.cache = KomgaCache:new(self)
     self.sync = KomgaSync:new(self)
     self.menu = KomgaMenu:new(self)
-    
+    self.bookshelf = KomgaBookshelf
+
     self.ui.menu:registerToMainMenu(self)
     self:registerEvents()
+
+    -- Wait a tick so the Bookshelf plugin, if installed, has initialised too.
+    local ui = self.ui
+    UIManager:nextTick(function() KomgaBookshelf.install(ui) end)
     logger.info("KomgaPlugin: Initialized successfully")
 end
 
