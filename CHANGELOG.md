@@ -4,6 +4,32 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-20
+### Added
+- **Collections Browsing** (#9, thanks @Gunflame13):
+  - Added a "Collections" entry to the home menu to browse Komga collections and drill into the series each one contains.
+- **One-Shot Browsing** (#9, thanks @Gunflame13):
+  - Added a "One-Shots" entry to the home menu listing every one-shot on the server, sorted alphabetically by displayed title.
+  - Sorting is accent- and case-insensitive, and orders punctuation before digits before letters.
+- **Disable Readest Sync for Komga Books**:
+  - Added a setting (default off) that suppresses the Readest plugin's per-book sync for any book managed by kokomga, even when Readest auto-sync is enabled globally. Side-loaded books and Readest's own library-wide sync are unaffected.
+- **Localization (i18n)**:
+  - Added Simplified Chinese, Traditional Chinese, Japanese, and Spanish translations for all new collection, one-shot, and Readest options.
+
+### Changed
+- **One-Shot Download Location** (#9, thanks @Gunflame13):
+  - One-shots now download to the root download folder instead of a per-series subfolder, since a one-shot's series contains only that book. One-shots downloaded before this change remain in their old series subfolder and are not migrated, so they may show as not downloaded.
+- **Recently Added Books** (#9, thanks @Gunflame13):
+  - Now sourced from Komga's `/api/v1/books/latest` endpoint instead of querying books sorted by creation date.
+- **Home Menu Row Sizing** (#9, thanks @Gunflame13):
+  - The home menu now sizes its rows to the number of entries it actually has, so the added entries stay on a single page, falling back to fewer rows on short screens.
+
+### Fixed
+- **Readest Cross-Document Progress Sync**:
+  - Fixed the next chapter opening on its last page during automatic chapter transitions. The Readest plugin could apply the previous chapter's reading position to the newly opened chapter; because its apply path only moves forward and clamps an out-of-range page, every auto-advanced chapter jumped to the end, was marked finished, and pushed that position back to the Readest cloud.
+  - Readest progress is now rejected when it arrives through a reader that is no longer the active one, or when both the file checksum and the page count disagree with the open document. Legitimate cross-device resumes are unaffected.
+  - Readest's pending background pull and delayed push are now cancelled before switching documents.
+
 ## [2.1.0] - 2026-07-14
 
 ### Added
