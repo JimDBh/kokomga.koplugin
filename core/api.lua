@@ -379,6 +379,10 @@ function KomgaAPI:download_series_thumbnail(series_id)
     return self:download_image("/api/v1/series/" .. escape_uri(series_id) .. "/thumbnail")
 end
 
+function KomgaAPI:download_collection_thumbnail(collection_id)
+    return self:download_image("/api/v1/collections/" .. escape_uri(collection_id) .. "/thumbnail")
+end
+
 -- Download raw book thumbnail
 function KomgaAPI:download_book_thumbnail(book_id)
     return self:download_image("/api/v1/books/" .. escape_uri(book_id) .. "/thumbnail")

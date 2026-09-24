@@ -33,16 +33,24 @@ local KomgaBookshelf = {}
 
 local SOURCE_KIND = "komga"
 local SERIES_DRILL = "komga_series"
+local COLLECTION_DRILL = "komga_collection"
 local PATH_PREFIX = "KOMGA://"
 
-local LIST_LIMIT = 50            -- items on a shelf's own list
+local LIST_LIMIT = 50            -- items on a "recent" shelf's own list
+local ONE_SHOTS_LIMIT = 1000     -- one-shots are listed by title, so keep far more
+local COLLECTIONS_LIMIT = 200    -- collections on the Collections shelf
 local RECENT_READ_SCAN = 200     -- books scanned to find the recently read series
 local SERIES_BOOKS_LIMIT = 1000  -- books fetched when drilling into a series
+local COLLECTION_SERIES_LIMIT = 500 -- series fetched when drilling into a collection
 local WANT_ALL_LIMIT = 100000    -- Bookshelf's select-all fetch wants everything
-local MAX_CACHED_SERIES = 20     -- series drill-downs kept in the cache file
+local MAX_CACHED_DRILLS = 20     -- series / collection drill-downs kept per section
 local RETRY_SECONDS = 60         -- minimum gap before retrying a failed refresh
 
-KomgaBookshelf.LIST_MODES = { "recent_series", "new_series", "new_books" }
+-- In the order of kokomga's browser home page, plus Recently Read Series.
+KomgaBookshelf.LIST_MODES = {
+    "keep_reading", "on_deck", "recent_series", "new_series",
+    "new_books", "one_shots", "collections",
+}
 local DEFAULT_MODE = "recent_series"
 
 local installed = false
@@ -120,11 +128,20 @@ local function listMode(source)
     return DEFAULT_MODE
 end
 
+-- Labels reuse the browser home page's own strings, already translated.
+local LIST_LABELS = {
+    keep_reading = "Keep Reading",
+    on_deck = "On Deck",
+    recent_series = "Recently Read Series",
+    new_series = "Recently Added Series",
+    new_books = "Recently Added Books",
+    one_shots = "One-Shots",
+    collections = "Collections",
+}
+
 function KomgaBookshelf.listLabel(plugin, mode)
     local _ = plugin and plugin.i18n and plugin.i18n._ or function(s) return s end
-    if mode == "new_series" then return _("Recently Added Series") end
-    if mode == "new_books" then return _("Recently Added Books") end
-    return _("Recently Read Series")
+    return _(LIST_LABELS[mode] or LIST_LABELS[DEFAULT_MODE])
 end
 
 -- ---------------------------------------------------------------------------
@@ -153,14 +170,17 @@ local function writeEntry(section, key, entry)
     local entries = s:readSetting(section) or {}
     entries[key] = entry
 
-    if section == "series" then
+    -- Drill-downs are keyed by series / collection id and would otherwise
+    -- accumulate forever; keep the most recently fetched. The shelf lists are
+    -- a fixed handful.
+    if section ~= "lists" then
         local keys = {}
         for k, v in pairs(entries) do
             keys[#keys + 1] = { key = k, at = v.fetched_at or 0 }
         end
-        if #keys > MAX_CACHED_SERIES then
+        if #keys > MAX_CACHED_DRILLS then
             table.sort(keys, function(a, b) return a.at > b.at end)
-            for i = MAX_CACHED_SERIES + 1, #keys do
+            for i = MAX_CACHED_DRILLS + 1, #keys do
                 entries[keys[i].key] = nil
             end
         end
@@ -236,14 +256,55 @@ local function trimSeries(series)
     }
 end
 
-local function contentOf(response)
-    if type(response) == "table" and type(response.content) == "table" then
-        return response.content
-    end
+local function trimCollection(collection)
+    return {
+        id = asString(collection.id),
+        title = asString(collection.name),
+        lastModified = asString(collection.lastModifiedDate),
+    }
 end
 
+-- Komga answers with a page ({ content = [...] }); an unpaged request may hand
+-- back the array itself, which the browser's One-Shots list allows for too.
+local function contentOf(response)
+    if type(response) ~= "table" then return nil end
+    if type(response.content) == "table" then return response.content end
+    if response[1] ~= nil then return response end
+end
+
+local LIST_ITEM_TYPES = {
+    recent_series = "series",
+    new_series = "series",
+    collections = "collection",
+}
+
 local function listItemType(mode)
-    return mode == "new_books" and "book" or "series"
+    return LIST_ITEM_TYPES[mode] or "book"
+end
+
+local function trimBooks(content, limit)
+    local items = {}
+    for _, book in ipairs(content) do
+        local item = asTable(book) and trimBook(book)
+        if item and item.id then items[#items + 1] = item end
+        if limit and #items >= limit then break end
+    end
+    return items
+end
+
+-- Title order for one-shots, shared with the browser's One-Shots list so the
+-- two agree. Falls back to a plain case-insensitive sort.
+local function sortByTitle(items)
+    local ok, Browser = pcall(require, "ui/browser")
+    if ok and type(Browser) == "table" and type(Browser.sortBooksByVisibleTitle) == "function"
+            and pcall(Browser.sortBooksByVisibleTitle, items) then
+        return
+    end
+    local function key(item)
+        local md = item.metadata or {}
+        return tostring(md.title or item.name or ""):lower()
+    end
+    table.sort(items, function(a, b) return key(a) < key(b) end)
 end
 
 local function fetchList(plugin, mode)
@@ -260,8 +321,32 @@ local function fetchList(plugin, mode)
     elseif mode == "new_books" then
         local content = contentOf(api:get_latest_books(0, LIST_LIMIT))
         if not content then return nil end
-        for _, book in ipairs(content) do
-            local item = asTable(book) and trimBook(book)
+        items = trimBooks(content)
+    elseif mode == "keep_reading" then
+        -- The browser's Keep Reading query.
+        local content = contentOf(api:get_books({
+            read_status = "IN_PROGRESS",
+            sort = "readProgress.readDate,desc",
+        }, 0, LIST_LIMIT))
+        if not content then return nil end
+        items = trimBooks(content)
+    elseif mode == "on_deck" then
+        local content = contentOf(api:get_books_ondeck(0, LIST_LIMIT))
+        if not content then return nil end
+        items = trimBooks(content)
+    elseif mode == "one_shots" then
+        -- Komga returns every one-shot unpaged; order them as the browser does,
+        -- then cap.
+        local content = contentOf(api:get_one_shots())
+        if not content then return nil end
+        items = trimBooks(content)
+        sortByTitle(items)
+        for i = #items, ONE_SHOTS_LIMIT + 1, -1 do items[i] = nil end
+    elseif mode == "collections" then
+        local content = contentOf(api:get_collections(0, COLLECTIONS_LIMIT))
+        if not content then return nil end
+        for _, collection in ipairs(content) do
+            local item = asTable(collection) and trimCollection(collection)
             if item and item.id then items[#items + 1] = item end
         end
     else
@@ -293,9 +378,17 @@ local function fetchSeriesBooks(plugin, series_id)
     local content = contentOf(plugin.api:get_books_for_series(series_id,
         { sort = "metadata.numberSort,asc" }, 0, SERIES_BOOKS_LIMIT))
     if not content then return nil end
+    return trimBooks(content)
+end
+
+-- A collection's series, in the collection's own order.
+local function fetchCollectionSeries(plugin, collection_id)
+    local content = contentOf(plugin.api:get_series_for_collection(collection_id,
+        0, COLLECTION_SERIES_LIMIT))
+    if not content then return nil end
     local items = {}
-    for _, book in ipairs(content) do
-        local item = asTable(book) and trimBook(book)
+    for _, series in ipairs(content) do
+        local item = asTable(series) and trimSeries(series)
         if item and item.id then items[#items + 1] = item end
     end
     return items
@@ -482,6 +575,30 @@ local function seriesItem(dto)
     }
 end
 
+-- A collection, as a folder card; opening it lists its series as series cards.
+local function collectionItem(dto)
+    local path = PATH_PREFIX .. "collection/" .. dto.id
+    local title = dto.title or "?"
+    local cover = existingCover("collection", dto.id)
+    return {
+        kind = "folder",
+        path = path,
+        label = title,
+        komga_collection_id = dto.id,
+        komga_collection_title = title,
+        first_book = cover and {
+            filepath = path,
+            title = title,
+            display_title = title,
+            cover_image_path = cover,
+            has_cover = true,
+            status = "unread",
+            read_status = "unread",
+            is_komga = true,
+        } or nil,
+    }
+end
+
 -- ---------------------------------------------------------------------------
 -- Shelf contents
 -- ---------------------------------------------------------------------------
@@ -497,6 +614,13 @@ local function seriesSpec(series_id)
     return {
         section = "series", key = series_id, item_type = "book",
         fetch = function(plugin) return fetchSeriesBooks(plugin, series_id) end,
+    }
+end
+
+local function collectionSpec(collection_id)
+    return {
+        section = "collections", key = collection_id, item_type = "series",
+        fetch = function(plugin) return fetchCollectionSeries(plugin, collection_id) end,
     }
 end
 
@@ -518,6 +642,10 @@ local function buildView(plugin, spec, offset, limit, allow_network, want_all)
             local item = seriesItem(dto)
             if not item.first_book then noteMissingCover(missing, "series", dto) end
             page[#page + 1] = item
+        elseif spec.item_type == "collection" then
+            local item = collectionItem(dto)
+            if not item.first_book then noteMissingCover(missing, "collection", dto) end
+            page[#page + 1] = item
         else
             local record = bookRecord(plugin, dto)
             if not record.cover_image_path then noteMissingCover(missing, "book", dto) end
@@ -529,6 +657,65 @@ local function buildView(plugin, spec, offset, limit, allow_network, want_all)
     logger.dbg("KomgaBookshelf: view", spec.section, tostring(spec.key), "->", #page,
         "of", #all, "items, offset", offset, entry and "" or "(not fetched yet)")
     return page, #all
+end
+
+-- What a Bookshelf widget is showing, when it is ours: a Komga shelf's list, or
+-- a series or collection drilled into from one. nil for anything else,
+-- including a search run from a Komga shelf.
+local function viewSpec(widget, TabModel)
+    local path = widget._drilldown_path
+    local tip = path and path[#path]
+    if tip then
+        local payload = type(tip.payload) == "table" and tip.payload or {}
+        if tip.kind == SERIES_DRILL and payload.series_id then
+            return seriesSpec(payload.series_id)
+        end
+        if tip.kind == COLLECTION_DRILL and payload.collection_id then
+            return collectionSpec(payload.collection_id)
+        end
+        return nil
+    end
+    local tab = TabModel.getById(widget.chip)
+    local source = tab and tab.source
+    if type(source) == "table" and source.kind == SOURCE_KIND then
+        return listSpec(listMode(source))
+    end
+end
+
+-- Pull-down on a Komga shelf fetches what is on screen from Komga straight
+-- away, whatever the cache's age, and keeps the notice up until it is done --
+-- the same gesture refreshes an OPDS catalogue. (Bookshelf's own refresh re-walks
+-- the local library, which finishes at once here: its notice only flashed.)
+local function refreshNow(spec)
+    local plugin = livePlugin()
+    if not plugin then return end
+    local _ = plugin.i18n._
+    local NetworkMgr = require("ui/network/manager")
+    NetworkMgr:runWhenOnline(function()
+        local InfoMessage = require("ui/widget/infomessage")
+        local notice = InfoMessage:new{ text = _("Refreshing Komga…") }
+        UIManager:show(notice)
+        UIManager:forceRePaint()
+        UIManager:nextTick(function()
+            local live = livePlugin() or plugin
+            local id = spec.section .. "|" .. tostring(spec.key)
+            local ok, items = pcall(spec.fetch, live)
+            UIManager:close(notice)
+            if ok and items then
+                last_failure[id] = nil
+                logger.info("KomgaBookshelf: refreshed", #items, "items for", id)
+                writeEntry(spec.section, spec.key, { fetched_at = os.time(), items = items })
+                -- An explicit refresh is the moment to retry covers the server
+                -- could not supply earlier in the session.
+                cover_attempted = {}
+            else
+                last_failure[id] = os.time()
+                logger.warn("KomgaBookshelf: refresh failed for", id, ok and "" or tostring(items))
+                live:notify(_("Couldn't refresh from Komga."), "error")
+            end
+            rebuildShelf()
+        end)
+    end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -957,66 +1144,80 @@ function KomgaBookshelf.install(ui)
     local orig_fetchChipItems = Widget._fetchChipItems
     Widget._fetchChipItems = function(widget, n, want_all)
         local plugin = livePlugin()
-        if plugin then
-            local path = widget._drilldown_path
-            local tip = path and path[#path]
-            local spec
-            if tip then
-                if tip.kind == SERIES_DRILL and tip.payload and tip.payload.series_id then
-                    spec = seriesSpec(tip.payload.series_id)
-                end
-            else
-                local tab = TabModel.getById(widget.chip)
-                local source = tab and tab.source
-                if type(source) == "table" and source.kind == SOURCE_KIND then
-                    spec = listSpec(listMode(source))
-                end
-            end
-            if spec then
-                shelf_widget = widget
-                local offset = want_all and 0 or math.max(0, (widget._cursor or 1) - 1)
-                local limit = want_all and WANT_ALL_LIMIT or widget:_viewSize()
-                local ok, items, total = xpcall(function()
-                    return buildView(plugin, spec, offset, limit, true, want_all)
-                end, debug.traceback)
-                if ok then return items, total end
-                logger.warn("KomgaBookshelf: building the Komga shelf failed:", tostring(items))
-                return {}, 0
-            end
+        local spec = plugin and viewSpec(widget, TabModel)
+        if spec then
+            shelf_widget = widget
+            local offset = want_all and 0 or math.max(0, (widget._cursor or 1) - 1)
+            local limit = want_all and WANT_ALL_LIMIT or widget:_viewSize()
+            local ok, items, total = xpcall(function()
+                return buildView(plugin, spec, offset, limit, true, want_all)
+            end, debug.traceback)
+            if ok then return items, total end
+            logger.warn("KomgaBookshelf: building the Komga shelf failed:", tostring(items))
+            return {}, 0
         end
         return orig_fetchChipItems(widget, n, want_all)
     end
 
-    -- Tapping a series card drills in, like a folder, but into our own level.
+    -- Tapping a series or collection card drills in, like a folder, but into
+    -- our own level.
     local orig_expandFolder = Widget._expandFolder
     Widget._expandFolder = function(widget, folder, ...)
-        if type(folder) == "table" and folder.komga_series_id then
+        if type(folder) == "table" and (folder.komga_series_id or folder.komga_collection_id) then
+            local entry
+            if folder.komga_series_id then
+                entry = {
+                    kind = SERIES_DRILL,
+                    label = folder.komga_series_title or folder.label,
+                    payload = {
+                        series_id = folder.komga_series_id,
+                        series_title = folder.komga_series_title,
+                    },
+                }
+            else
+                entry = {
+                    kind = COLLECTION_DRILL,
+                    label = folder.komga_collection_title or folder.label,
+                    payload = {
+                        collection_id = folder.komga_collection_id,
+                        collection_title = folder.komga_collection_title,
+                    },
+                }
+            end
             -- Never hand a synthetic path to the original: it would drill into
             -- a filesystem folder that does not exist.
-            local ok, err = pcall(widget._drillInto, widget, {
-                kind = SERIES_DRILL,
-                label = folder.komga_series_title or folder.label,
-                payload = {
-                    series_id = folder.komga_series_id,
-                    series_title = folder.komga_series_title,
-                },
-            })
+            local ok, err = pcall(widget._drillInto, widget, entry)
             if not ok then
-                logger.warn("KomgaBookshelf: opening series failed:", tostring(err))
+                logger.warn("KomgaBookshelf: opening", entry.kind, "failed:", tostring(err))
             end
             return
         end
         return orig_expandFolder(widget, folder, ...)
     end
 
+    -- Pull-down refresh. Optional: without it, a Komga shelf still refreshes
+    -- once its cache expires.
+    if type(Widget._refreshLibrary) == "function" then
+        local orig_refreshLibrary = Widget._refreshLibrary
+        Widget._refreshLibrary = function(widget, ...)
+            local spec = livePlugin() and viewSpec(widget, TabModel)
+            if spec then
+                local ok, err = pcall(refreshNow, spec)
+                if ok then return end
+                logger.warn("KomgaBookshelf: refresh failed:", tostring(err))
+            end
+            return orig_refreshLibrary(widget, ...)
+        end
+    end
+
     -- Long-pressing a folder card opens Bookshelf's folder menu -- pin, move,
-    -- rename, set image -- all of which act on a directory, and a series card has
-    -- none (pinning one would create a chip pointing at a synthetic path). Treat
-    -- the long-press on a series card as a tap instead.
+    -- rename, set image -- all of which act on a directory, and a series or
+    -- collection card has none (pinning one would create a chip pointing at a
+    -- synthetic path). Treat the long-press on one as a tap instead.
     if type(Widget._openGroupMenu) == "function" then
         local orig_openGroupMenu = Widget._openGroupMenu
         Widget._openGroupMenu = function(widget, group, kind, ...)
-            if type(group) == "table" and group.komga_series_id then
+            if type(group) == "table" and (group.komga_series_id or group.komga_collection_id) then
                 return widget:_expandFolder(group)
             end
             return orig_openGroupMenu(widget, group, kind, ...)

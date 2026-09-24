@@ -72,6 +72,8 @@ function KomgaCache:cacheThumbnail(type_label, id, lastModifiedString, force)
     local img_data = nil
     if type_label == "series" then
         img_data = self.plugin.api:download_series_thumbnail(id)
+    elseif type_label == "collection" then
+        img_data = self.plugin.api:download_collection_thumbnail(id)
     else
         img_data = self.plugin.api:download_book_thumbnail(id)
     end

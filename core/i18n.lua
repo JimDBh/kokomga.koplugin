@@ -144,6 +144,8 @@ local translations = {
         ["Description"] = "简介",
         ["Recently Read Series"] = "最近阅读的系列",
         ["Couldn't load this book from Komga."] = "无法从 Komga 加载此书。",
+        ["Refreshing Komga…"] = "正在刷新 Komga…",
+        ["Couldn't refresh from Komga."] = "无法从 Komga 刷新。",
         ["Browse Komga library"] = "浏览 Komga 图书馆"
     }
 }
@@ -287,6 +289,8 @@ translations["zh_TW"] = {
     ["Description"] = "簡介",
     ["Recently Read Series"] = "最近閱讀的系列",
     ["Couldn't load this book from Komga."] = "無法從 Komga 載入此書。",
+    ["Refreshing Komga…"] = "正在重新整理 Komga…",
+    ["Couldn't refresh from Komga."] = "無法從 Komga 重新整理。",
     ["Browse Komga library"] = "瀏覽 Komga 圖書館"
 }
 
@@ -429,6 +433,8 @@ translations["ja"] = {
     ["Description"] = "説明",
     ["Recently Read Series"] = "最近読んだシリーズ",
     ["Couldn't load this book from Komga."] = "Komga からこの本を読み込めませんでした。",
+    ["Refreshing Komga…"] = "Komga を更新中…",
+    ["Couldn't refresh from Komga."] = "Komga から更新できませんでした。",
     ["Browse Komga library"] = "Komgaライブラリを閲覧"
 }
 
@@ -571,6 +577,8 @@ translations["es"] = {
     ["Description"] = "Descripción",
     ["Recently Read Series"] = "Series leídas recientemente",
     ["Couldn't load this book from Komga."] = "No se pudo cargar este libro desde Komga.",
+    ["Refreshing Komga…"] = "Actualizando Komga…",
+    ["Couldn't refresh from Komga."] = "No se pudo actualizar desde Komga.",
     ["Browse Komga library"] = "Examinar biblioteca de Komga"
 }
 

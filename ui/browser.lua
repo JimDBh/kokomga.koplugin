@@ -1156,4 +1156,8 @@ function KomgaBrowser:onMenuHold(entry)
     UIManager:show(dialog)
 end
 
+-- Shared with the Bookshelf integration, so its One-Shots shelf orders books
+-- exactly as this browser's One-Shots list does.
+KomgaBrowser.sortBooksByVisibleTitle = sortBooksByVisibleTitle
+
 return KomgaBrowser
