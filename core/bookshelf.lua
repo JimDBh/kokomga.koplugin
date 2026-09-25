@@ -155,24 +155,27 @@ function KomgaBookshelf.listLabel(plugin, mode)
     return _(LIST_LABELS[mode] or LIST_LABELS[DEFAULT_MODE])
 end
 
--- The read states a shelf can be filtered to, in Komga's terms.
-local READ_FILTERS = { "UNREAD", "IN_PROGRESS", "READ" }
-
--- A shelf's read-status filter: the chosen states, in a fixed order, or nil
--- to show everything -- which is what choosing none, or all three, means. A
--- shelf saved before several could be chosen holds one state as a string.
-local function readFilter(source)
-    local value = type(source) == "table" and source.read_status
+-- A filter's chosen values that are among `allowed`, in its order, or nil to
+-- show everything -- which is what choosing none, or all of them, means. A
+-- shelf saved before several could be chosen holds one value as a string.
+local function chosenValues(value, allowed)
     if type(value) == "string" then value = { value } end
     if type(value) ~= "table" then return nil end
     local chosen = {}
-    for _i, state in ipairs(value) do chosen[state] = true end
+    for _i, v in ipairs(value) do chosen[v] = true end
     local out = {}
-    for _i, state in ipairs(READ_FILTERS) do
-        if chosen[state] then out[#out + 1] = state end
+    for _i, v in ipairs(allowed) do
+        if chosen[v] then out[#out + 1] = v end
     end
-    if #out == 0 or #out == #READ_FILTERS then return nil end
+    if #out == 0 or #out == #allowed then return nil end
     return out
+end
+
+-- The read states a shelf can be filtered to, in Komga's terms.
+local READ_FILTERS = { "UNREAD", "IN_PROGRESS", "READ" }
+
+local function readFilter(source)
+    return chosenValues(type(source) == "table" and source.read_status, READ_FILTERS)
 end
 
 -- The browser's own labels for the three states.
@@ -220,19 +223,53 @@ local function seriesSort(source)
     return (option or SERIES_SORTS[1]).value
 end
 
-local function publicationFilter(source)
-    local option = known(PUBLICATION_STATUSES, type(source) == "table" and source.status)
-    return option and option.value or nil
+local PUBLICATION_VALUES = {}
+for _i, option in ipairs(PUBLICATION_STATUSES) do
+    PUBLICATION_VALUES[#PUBLICATION_VALUES + 1] = option.value
 end
 
+local function publicationFilter(source)
+    return chosenValues(type(source) == "table" and source.status, PUBLICATION_VALUES)
+end
+
+-- Library ids are only known once Komga has been asked, so "all of them" is
+-- settled when they are chosen (see pickLibrary) rather than here.
 local function libraryFilter(source)
-    local id = type(source) == "table" and source.library_id
-    return type(id) == "string" and id ~= "" and id or nil
+    local value = type(source) == "table" and source.library_id
+    if type(value) == "string" then value = { value } end
+    if type(value) ~= "table" then return nil end
+    local out = {}
+    for _i, id in ipairs(value) do
+        if type(id) == "string" and id ~= "" then out[#out + 1] = id end
+    end
+    return #out > 0 and out or nil
 end
 
 local function optionLabel(plugin, options, value, fallback)
     local option = known(options, value)
     return gettext(plugin)(option and option.label or fallback)
+end
+
+local function publicationLabel(plugin, filter)
+    if not filter then return gettext(plugin)("Any") end
+    local labels = {}
+    for _i, value in ipairs(filter) do
+        labels[#labels + 1] = optionLabel(plugin, PUBLICATION_STATUSES, value, value)
+    end
+    return table.concat(labels, ", ")
+end
+
+-- Library names are stored with their ids, so the editor can show them
+-- offline. A shelf saved before several could be chosen holds one name.
+local function libraryLabel(plugin, source)
+    local ids = libraryFilter(source)
+    if not ids then return gettext(plugin)("All Libraries") end
+    local names = type(source.library_names) == "table" and source.library_names or {}
+    local labels = {}
+    for _i, id in ipairs(ids) do
+        labels[#labels + 1] = names[id] or (#ids == 1 and source.library_name) or id
+    end
+    return table.concat(labels, ", ")
 end
 
 -- ---------------------------------------------------------------------------
@@ -867,8 +904,8 @@ local function allSeriesSpec(source)
         key = table.concat({
             query.sort,
             query.read_status and table.concat(query.read_status, ",") or "",
-            query.library_id or "",
-            query.status or "",
+            query.library_id and table.concat(query.library_id, ",") or "",
+            query.status and table.concat(query.status, ",") or "",
         }, "|"),
         fetch_page = function(plugin, page)
             local response = plugin.api:query_series{
@@ -1251,23 +1288,24 @@ local function pickList(plugin, current, on_pick, on_cancel)
     pickOption(plugin, "Komga", options, current, on_pick, on_cancel)
 end
 
--- Read states, several at once: tap to tick or untick, then Apply. The dialog
--- is shown afresh after each tap so its ticks are current. Ticking none, or
--- all three, means no filter.
-local function pickReadFilter(plugin, current, on_pick)
+-- Several choices at once: tap to tick or untick, then Apply. The dialog is
+-- shown afresh after each tap so its ticks are current. on_apply receives the
+-- ticked values in the options' order; what none or all of them mean is the
+-- caller's to decide.
+local function pickMany(plugin, options, current, on_apply)
     local _ = gettext(plugin)
     local ButtonDialog = require("ui/widget/buttondialog")
     local chosen = {}
-    for _i, state in ipairs(current or {}) do chosen[state] = true end
+    for _i, value in ipairs(current or {}) do chosen[value] = true end
 
     local dialog
     local function show()
         local rows = {}
-        for _i, state in ipairs(READ_FILTERS) do
+        for _i, option in ipairs(options) do
             rows[#rows + 1] = { {
-                text = (chosen[state] and "\xE2\x9C\x93 " or "  ") .. readStateLabel(plugin, state),
+                text = (chosen[option.value] and "\xE2\x9C\x93 " or "  ") .. option.label,
                 callback = function()
-                    chosen[state] = not chosen[state] or nil
+                    chosen[option.value] = not chosen[option.value] or nil
                     UIManager:close(dialog)
                     show()
                 end,
@@ -1284,10 +1322,10 @@ local function pickReadFilter(plugin, current, on_pick)
                 callback = function()
                     UIManager:close(dialog)
                     local list = {}
-                    for _i, state in ipairs(READ_FILTERS) do
-                        if chosen[state] then list[#list + 1] = state end
+                    for _i, option in ipairs(options) do
+                        if chosen[option.value] then list[#list + 1] = option.value end
                     end
-                    on_pick(readFilter({ read_status = list }))
+                    on_apply(list)
                 end,
             },
         }
@@ -1295,6 +1333,16 @@ local function pickReadFilter(plugin, current, on_pick)
         UIManager:show(dialog)
     end
     show()
+end
+
+local function pickReadFilter(plugin, current, on_pick)
+    local options = {}
+    for _i, state in ipairs(READ_FILTERS) do
+        options[#options + 1] = { value = state, label = readStateLabel(plugin, state) }
+    end
+    pickMany(plugin, options, current, function(list)
+        on_pick(chosenValues(list, READ_FILTERS))
+    end)
 end
 
 local function translated(plugin, options)
@@ -1311,11 +1359,9 @@ local function pickSort(plugin, current, on_pick)
 end
 
 local function pickPublication(plugin, current, on_pick)
-    local options = { { value = false, label = gettext(plugin)("Any") } }
-    for _i, option in ipairs(translated(plugin, PUBLICATION_STATUSES)) do
-        options[#options + 1] = option
-    end
-    pickOption(plugin, nil, options, current or false, function(value) on_pick(value or nil) end)
+    pickMany(plugin, translated(plugin, PUBLICATION_STATUSES), current, function(list)
+        on_pick(chosenValues(list, PUBLICATION_VALUES))
+    end)
 end
 
 -- Komga's libraries, fetched when online and remembered for offline use.
@@ -1337,8 +1383,8 @@ local function loadLibraries(plugin)
     return cached and cached.items
 end
 
--- The library's name is stored alongside its id, so the editor can show it
--- without the server.
+-- Library names are stored alongside their ids, so the editor can show them
+-- without the server. Ticking none, or every library, means no filter.
 local function pickLibrary(plugin, source, on_done)
     local _ = gettext(plugin)
     local libraries = loadLibraries(plugin)
@@ -1346,15 +1392,20 @@ local function pickLibrary(plugin, source, on_done)
         if plugin then plugin:notify(_("Couldn't load libraries from Komga."), "error") end
         return
     end
-    local options = { { value = false, label = _("All Libraries") } }
+    local options = {}
     for _i, library in ipairs(libraries) do
         options[#options + 1] = { value = library.id, label = library.name }
     end
-    pickOption(plugin, nil, options, libraryFilter(source) or false, function(value)
-        source.library_id = value or nil
-        source.library_name = nil
-        for _i, library in ipairs(libraries) do
-            if library.id == value then source.library_name = library.name end
+    pickMany(plugin, options, libraryFilter(source), function(list)
+        source.library_name = nil  -- the single name older shelves kept
+        if #list == 0 or #list == #libraries then
+            source.library_id, source.library_names = nil, nil
+        else
+            local names = {}
+            for _i, library in ipairs(libraries) do names[library.id] = library.name end
+            local chosen_names = {}
+            for _i, id in ipairs(list) do chosen_names[id] = names[id] end
+            source.library_id, source.library_names = list, chosen_names
         end
         on_done()
     end)
@@ -1365,9 +1416,9 @@ local function seriesFilterSummary(plugin, source)
     local parts = {}
     local read = readFilter(source)
     if read then parts[#parts + 1] = readFilterLabel(plugin, read) end
-    if libraryFilter(source) then parts[#parts + 1] = source.library_name or source.library_id end
+    if libraryFilter(source) then parts[#parts + 1] = libraryLabel(plugin, source) end
     local status = publicationFilter(source)
-    if status then parts[#parts + 1] = optionLabel(plugin, PUBLICATION_STATUSES, status, "Any") end
+    if status then parts[#parts + 1] = publicationLabel(plugin, status) end
     return #parts > 0 and table.concat(parts, " · ") or _("None")
 end
 
@@ -1399,12 +1450,10 @@ local function openSeriesFilters(plugin, draft, on_close)
                     done()
                 end)
             end),
-            row(T(_("Library: %1"), libraryFilter(source)
-                    and (source.library_name or source.library_id) or _("All Libraries")), function()
+            row(T(_("Library: %1"), libraryLabel(plugin, source)), function()
                 pickLibrary(plugin, source, done)
             end),
-            row(T(_("Publication: %1"), optionLabel(plugin, PUBLICATION_STATUSES,
-                    publicationFilter(source), "Any")), function()
+            row(T(_("Publication: %1"), publicationLabel(plugin, publicationFilter(source))), function()
                 pickPublication(plugin, publicationFilter(source), function(value)
                     source.status = value
                     done()
