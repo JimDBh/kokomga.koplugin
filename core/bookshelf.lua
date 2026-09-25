@@ -43,14 +43,17 @@ local SERIES_BOOKS_LIMIT = 1000  -- books fetched when drilling into a series
 local COLLECTION_SERIES_LIMIT = 500 -- series fetched when drilling into a collection
 local WANT_ALL_LIMIT = 100000    -- Bookshelf's select-all fetch wants everything
 local MAX_CACHED_DRILLS = 20     -- series / collection drill-downs kept per section
+local MAX_CACHED_PAGES = 60      -- All Series pages kept (60 x 50 series)
+local PAGE_SIZE = 50             -- All Series is fetched from Komga in pages of this size
 local RETRY_SECONDS = 60         -- minimum gap before retrying a failed refresh
 
--- In the order of kokomga's browser home page, plus Recently Read Series.
+-- All Series first, then the order of kokomga's browser home page, plus
+-- Recently Read Series.
 KomgaBookshelf.LIST_MODES = {
-    "keep_reading", "on_deck", "recent_series", "new_series",
+    "all_series", "keep_reading", "on_deck", "recent_series", "new_series",
     "new_books", "one_shots", "collections",
 }
-local DEFAULT_MODE = "recent_series"
+local DEFAULT_MODE = "all_series"
 
 local installed = false
 local shelf_widget = nil      -- last Bookshelf widget that asked us for items
@@ -129,6 +132,7 @@ end
 
 -- Labels reuse the browser home page's own strings, already translated.
 local LIST_LABELS = {
+    all_series = "All Series",
     keep_reading = "Keep Reading",
     on_deck = "On Deck",
     recent_series = "Recently Read Series",
@@ -170,6 +174,51 @@ local function readFilterLabel(plugin, value)
     return _("All")
 end
 
+-- All Series is sorted and filtered by Komga. These are the sort keys Komga's
+-- series query accepts.
+local SERIES_SORTS = {
+    { value = "metadata.titleSort,asc", label = "Title" },
+    { value = "metadata.titleSort,desc", label = "Title (Z-A)" },
+    { value = "createdDate,desc", label = "Recently Added" },
+    { value = "lastModifiedDate,desc", label = "Recently Updated" },
+    { value = "readDate,desc", label = "Recently Read" },
+    { value = "booksMetadata.releaseDate,desc", label = "Release Date" },
+    { value = "booksCount,desc", label = "Book Count" },
+}
+
+local PUBLICATION_STATUSES = {
+    { value = "ONGOING", label = "Ongoing" },
+    { value = "ENDED", label = "Ended" },
+    { value = "HIATUS", label = "Hiatus" },
+    { value = "ABANDONED", label = "Abandoned" },
+}
+
+local function known(options, value)
+    for _i, option in ipairs(options) do
+        if option.value == value then return option end
+    end
+end
+
+local function seriesSort(source)
+    local option = known(SERIES_SORTS, type(source) == "table" and source.sort)
+    return (option or SERIES_SORTS[1]).value
+end
+
+local function publicationFilter(source)
+    local option = known(PUBLICATION_STATUSES, type(source) == "table" and source.status)
+    return option and option.value or nil
+end
+
+local function libraryFilter(source)
+    local id = type(source) == "table" and source.library_id
+    return type(id) == "string" and id ~= "" and id or nil
+end
+
+local function optionLabel(plugin, options, value, fallback)
+    local option = known(options, value)
+    return gettext(plugin)(option and option.label or fallback)
+end
+
 -- ---------------------------------------------------------------------------
 -- Cache file
 -- ---------------------------------------------------------------------------
@@ -196,17 +245,18 @@ local function writeEntry(section, key, entry)
     local entries = s:readSetting(section) or {}
     entries[key] = entry
 
-    -- Drill-downs are keyed by series / collection id and would otherwise
-    -- accumulate forever; keep the most recently fetched. The shelf lists are
-    -- a fixed handful.
+    -- Drill-downs and All Series pages are keyed by id or query and would
+    -- otherwise accumulate forever; keep the most recently fetched. The shelf
+    -- lists are a fixed handful.
     if section ~= "lists" then
+        local cap = section == "pages" and MAX_CACHED_PAGES or MAX_CACHED_DRILLS
         local keys = {}
         for k, v in pairs(entries) do
             keys[#keys + 1] = { key = k, at = v.fetched_at or 0 }
         end
-        if #keys > MAX_CACHED_DRILLS then
+        if #keys > cap then
             table.sort(keys, function(a, b) return a.at > b.at end)
-            for i = MAX_CACHED_DRILLS + 1, #keys do
+            for i = cap + 1, #keys do
                 entries[keys[i].key] = nil
             end
         end
@@ -305,6 +355,7 @@ local function contentOf(response)
 end
 
 local LIST_ITEM_TYPES = {
+    all_series = "series",
     recent_series = "series",
     new_series = "series",
     collections = "collection",
@@ -422,6 +473,16 @@ end
 
 -- Refresh one cache entry on the next tick, then repaint the shelf. Runs after
 -- Bookshelf has painted, so a slow server never holds up the home screen.
+-- A fetch returns a list, or for an All Series page { items = …, total = … }
+-- with Komga's total. Either becomes a cache entry.
+local function entryFromResult(result)
+    if type(result) ~= "table" then return nil end
+    if type(result.items) == "table" then
+        return { fetched_at = os.time(), items = result.items, total = result.total }
+    end
+    return { fetched_at = os.time(), items = result }
+end
+
 local function scheduleRefresh(section, key, fetch)
     local id = section .. "|" .. tostring(key)
     if pending_refresh[id] then return end
@@ -434,15 +495,16 @@ local function scheduleRefresh(section, key, fetch)
         local plugin = livePlugin()
         if not plugin then return end
 
-        local ok, items = pcall(fetch, plugin)
-        if ok and items then
+        local ok, result = pcall(fetch, plugin)
+        local entry = ok and entryFromResult(result)
+        if entry then
             last_failure[id] = nil
-            logger.info("KomgaBookshelf: fetched", #items, "items for", id)
-            writeEntry(section, key, { fetched_at = os.time(), items = items })
+            logger.info("KomgaBookshelf: fetched", #entry.items, "items for", id)
+            writeEntry(section, key, entry)
             rebuildShelf()
         else
             last_failure[id] = os.time()
-            logger.warn("KomgaBookshelf: refresh failed for", id, ok and "" or tostring(items))
+            logger.warn("KomgaBookshelf: refresh failed for", id, ok and "" or tostring(result))
         end
     end)
 end
@@ -682,11 +744,120 @@ local function collectionSpec(collection_id, filter)
     }
 end
 
+-- All Series is too big to fetch whole: it is paged from Komga as it is
+-- browsed, and Komga applies the sort and filters. Pages are cached under the
+-- query, so each combination of settings pages independently.
+local function allSeriesSpec(source)
+    local query = {
+        sort = seriesSort(source),
+        read_status = readFilter(source),
+        library_id = libraryFilter(source),
+        status = publicationFilter(source),
+    }
+    return {
+        paged = true, section = "pages", item_type = "series",
+        key = table.concat({ query.sort, query.read_status or "", query.library_id or "", query.status or "" }, "|"),
+        fetch_page = function(plugin, page)
+            local response = plugin.api:query_series{
+                sort = query.sort, read_status = query.read_status,
+                library_id = query.library_id, status = query.status,
+                page = page, size = PAGE_SIZE,
+            }
+            local content = contentOf(response)
+            if not content then return nil end
+            local items = {}
+            for _i, series in ipairs(content) do
+                local item = asTable(series) and trimSeries(series)
+                if item and item.id then items[#items + 1] = item end
+            end
+            return { items = items, total = asNumber(response.totalElements) or #items }
+        end,
+    }
+end
+
+-- What a Komga shelf shows at its top level.
+local function rootSpec(source)
+    local mode = listMode(source)
+    if mode == "all_series" then return allSeriesSpec(source) end
+    return listSpec(mode, readFilter(source))
+end
+
+local function pageKey(spec, page)
+    return spec.key .. "|" .. page
+end
+
+-- Komga's total for a paged query, from whichever of its pages was fetched
+-- last. Knowing it before every page is cached lets Bookshelf's pager show the
+-- real length, and keeps paging forward from resetting to page 1.
+local function queryTotal(spec)
+    local prefix = spec.key .. "|"
+    local best
+    for k, entry in pairs(store():readSetting("pages") or {}) do
+        if type(k) == "string" and k:sub(1, #prefix) == prefix and type(entry) == "table"
+                and type(entry.total) == "number"
+                and (not best or (entry.fetched_at or 0) > (best.fetched_at or 0)) then
+            best = entry
+        end
+    end
+    return best and best.total
+end
+
+-- Forgets every cached page of a query.
+local function dropPages(spec)
+    local s = store()
+    local entries = s:readSetting("pages") or {}
+    local prefix = spec.key .. "|"
+    for k in pairs(entries) do
+        if type(k) == "string" and k:sub(1, #prefix) == prefix then entries[k] = nil end
+    end
+    s:saveSetting("pages", entries)
+    s:flush()
+end
+
+-- One page of a paged query, fetching from Komga only the pages it spans.
+local function buildPagedView(plugin, spec, offset, limit, allow_network, want_all)
+    local total = queryTotal(spec)
+    local stop = offset + limit
+    if total then stop = math.min(stop, total) end
+    local first_page = math.floor(offset / PAGE_SIZE)
+    local last_page = math.max(first_page, math.floor((math.max(stop, offset + 1) - 1) / PAGE_SIZE))
+
+    local pages = {}
+    for page = first_page, last_page do
+        local key = pageKey(spec, page)
+        local entry = readEntry("pages", key)
+        pages[page] = entry
+        -- Select-all asks for everything; serve only what is cached then.
+        if allow_network and not want_all and isStale(plugin, entry) then
+            scheduleRefresh("pages", key, function(p) return spec.fetch_page(p, page) end)
+        end
+    end
+
+    local items, missing = {}, {}
+    for i = offset + 1, stop do
+        local entry = pages[math.floor((i - 1) / PAGE_SIZE)]
+        local dto = entry and entry.items and entry.items[(i - 1) % PAGE_SIZE + 1]
+        if dto then
+            local item = seriesItem(dto)
+            if not item.first_book then noteMissingCover(missing, "series", dto) end
+            items[#items + 1] = item
+        end
+    end
+
+    if allow_network and not want_all then scheduleCovers(missing) end
+    logger.dbg("KomgaBookshelf: paged view", spec.key, "->", #items, "of", tostring(total),
+        "items, offset", offset)
+    return items, total or 0
+end
+
 -- One page of a shelf, as (items, total) -- the shape getBySource and
 -- _fetchChipItems return. Only the shelf on screen may reach the network
 -- (allow_network): Bookshelf also calls getBySource for every chip in the
 -- background to preload them, and those calls must stay cache-only.
 local function buildView(plugin, spec, offset, limit, allow_network, want_all)
+    if spec.paged then
+        return buildPagedView(plugin, spec, offset, limit, allow_network, want_all)
+    end
     local entry = readEntry(spec.section, spec.key)
     if allow_network and isStale(plugin, entry) then
         scheduleRefresh(spec.section, spec.key, spec.fetch)
@@ -748,7 +919,7 @@ local function viewSpec(widget, TabModel)
         return nil
     end
     if is_komga_shelf then
-        return listSpec(listMode(source), filter)
+        return rootSpec(source)
     end
 end
 
@@ -756,10 +927,21 @@ end
 -- away, whatever the cache's age, and keeps the notice up until it is done --
 -- the same gesture refreshes an OPDS catalogue. (Bookshelf's own refresh re-walks
 -- the local library, which finishes at once here: its notice only flashed.)
-local function refreshNow(spec)
+local function refreshNow(spec, widget)
     local plugin = livePlugin()
     if not plugin then return end
     local _ = plugin.i18n._
+
+    -- A paged query refreshes the page on screen; its other pages are dropped
+    -- once that succeeds, and refetched as they are shown.
+    local section, key, fetch = spec.section, spec.key, spec.fetch
+    if spec.paged then
+        local cursor = widget and widget._cursor or 1
+        local page = math.floor(math.max(0, cursor - 1) / PAGE_SIZE)
+        section, key = "pages", pageKey(spec, page)
+        fetch = function(p) return spec.fetch_page(p, page) end
+    end
+
     local NetworkMgr = require("ui/network/manager")
     NetworkMgr:runWhenOnline(function()
         local InfoMessage = require("ui/widget/infomessage")
@@ -768,19 +950,21 @@ local function refreshNow(spec)
         UIManager:forceRePaint()
         UIManager:nextTick(function()
             local live = livePlugin() or plugin
-            local id = spec.section .. "|" .. tostring(spec.key)
-            local ok, items = pcall(spec.fetch, live)
+            local id = section .. "|" .. tostring(key)
+            local ok, result = pcall(fetch, live)
+            local entry = ok and entryFromResult(result)
             UIManager:close(notice)
-            if ok and items then
+            if entry then
                 last_failure[id] = nil
-                logger.info("KomgaBookshelf: refreshed", #items, "items for", id)
-                writeEntry(spec.section, spec.key, { fetched_at = os.time(), items = items })
+                logger.info("KomgaBookshelf: refreshed", #entry.items, "items for", id)
+                if spec.paged then dropPages(spec) end
+                writeEntry(section, key, entry)
                 -- An explicit refresh is the moment to retry covers the server
                 -- could not supply earlier in the session.
                 cover_attempted = {}
             else
                 last_failure[id] = os.time()
-                logger.warn("KomgaBookshelf: refresh failed for", id, ok and "" or tostring(items))
+                logger.warn("KomgaBookshelf: refresh failed for", id, ok and "" or tostring(result))
                 live:notify(_("Couldn't refresh from Komga."), "error")
             end
             rebuildShelf()
@@ -947,6 +1131,125 @@ local function pickReadFilter(plugin, current, on_pick)
     pickOption(plugin, nil, options, current or false, function(value) on_pick(value or nil) end)
 end
 
+local function translated(plugin, options)
+    local _ = gettext(plugin)
+    local out = {}
+    for _i, option in ipairs(options) do
+        out[#out + 1] = { value = option.value, label = _(option.label) }
+    end
+    return out
+end
+
+local function pickSort(plugin, current, on_pick)
+    pickOption(plugin, nil, translated(plugin, SERIES_SORTS), current, on_pick)
+end
+
+local function pickPublication(plugin, current, on_pick)
+    local options = { { value = false, label = gettext(plugin)("Any") } }
+    for _i, option in ipairs(translated(plugin, PUBLICATION_STATUSES)) do
+        options[#options + 1] = option
+    end
+    pickOption(plugin, nil, options, current or false, function(value) on_pick(value or nil) end)
+end
+
+-- Komga's libraries, fetched when online and remembered for offline use.
+local function loadLibraries(plugin)
+    if isOnline() and plugin and plugin.api then
+        local response = plugin.api:get_libraries()
+        if type(response) == "table" then
+            local libraries = {}
+            for _i, library in ipairs(response) do
+                if asTable(library) and asString(library.id) then
+                    libraries[#libraries + 1] = { id = library.id, name = asString(library.name) or library.id }
+                end
+            end
+            writeEntry("meta", "libraries", { fetched_at = os.time(), items = libraries })
+            return libraries
+        end
+    end
+    local cached = readEntry("meta", "libraries")
+    return cached and cached.items
+end
+
+-- The library's name is stored alongside its id, so the editor can show it
+-- without the server.
+local function pickLibrary(plugin, source, on_done)
+    local _ = gettext(plugin)
+    local libraries = loadLibraries(plugin)
+    if not libraries then
+        if plugin then plugin:notify(_("Couldn't load libraries from Komga."), "error") end
+        return
+    end
+    local options = { { value = false, label = _("All Libraries") } }
+    for _i, library in ipairs(libraries) do
+        options[#options + 1] = { value = library.id, label = library.name }
+    end
+    pickOption(plugin, nil, options, libraryFilter(source) or false, function(value)
+        source.library_id = value or nil
+        source.library_name = nil
+        for _i, library in ipairs(libraries) do
+            if library.id == value then source.library_name = library.name end
+        end
+        on_done()
+    end)
+end
+
+local function seriesFilterSummary(plugin, source)
+    local _ = gettext(plugin)
+    local parts = {}
+    local read = readFilter(source)
+    if read then parts[#parts + 1] = readFilterLabel(plugin, read) end
+    if libraryFilter(source) then parts[#parts + 1] = source.library_name or source.library_id end
+    local status = publicationFilter(source)
+    if status then parts[#parts + 1] = optionLabel(plugin, PUBLICATION_STATUSES, status, "Any") end
+    return #parts > 0 and table.concat(parts, " · ") or _("None")
+end
+
+-- All Series' filters: read status, library and publication status, all
+-- applied by Komga. Each change hands back to the editor, which saves it.
+local function openSeriesFilters(plugin, draft, on_close)
+    local _ = gettext(plugin)
+    local T = template(plugin)
+    local source = draft.source
+    local function done()
+        if type(on_close) == "function" then on_close() end
+    end
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local dialog
+    local function row(text, open)
+        return { {
+            text = text,
+            callback = function()
+                UIManager:close(dialog)
+                open()
+            end,
+        } }
+    end
+    dialog = ButtonDialog:new{
+        buttons = {
+            row(T(_("Read status: %1"), readFilterLabel(plugin, readFilter(source))), function()
+                pickReadFilter(plugin, readFilter(source), function(value)
+                    source.read_status = value
+                    done()
+                end)
+            end),
+            row(T(_("Library: %1"), libraryFilter(source)
+                    and (source.library_name or source.library_id) or _("All Libraries")), function()
+                pickLibrary(plugin, source, done)
+            end),
+            row(T(_("Publication: %1"), optionLabel(plugin, PUBLICATION_STATUSES,
+                    publicationFilter(source), "Any")), function()
+                pickPublication(plugin, publicationFilter(source), function(value)
+                    source.status = value
+                    done()
+                end)
+            end),
+            { { text = _("Close"), callback = function() UIManager:close(dialog) end } },
+        },
+    }
+    UIManager:show(dialog)
+end
+
 -- A "Komga…" row for the "Shelf source" dialog, in the style of Bookshelf's
 -- "Specific X…" buttons. Picking a list does what Bookshelf's own buttons do:
 -- set the draft's source, apply the editor's source defaults, close, and hand
@@ -1019,7 +1322,8 @@ local function reshapeEditorRows(rows)
     local plugin = liveModule("kokomga")
     local _ = gettext(plugin)
     local T = template(plugin)
-    local list_button_kept = false
+    local is_all_series = listMode(draft.source) == "all_series"
+    local sort_seen = 0
     for _i, row in ipairs(rows) do
         if type(row) == "table" then
             local kept = {}
@@ -1028,16 +1332,26 @@ local function reshapeEditorRows(rows)
                 -- The callbacks stay Bookshelf's own: each calls an Editor
                 -- method (_pickSortLevel, _openFilters) and then marks the edit
                 -- for saving, and those methods are where our pickers take over.
+                -- The first sort button picks the list; for All Series the
+                -- second picks Komga's sort.
                 if r == "sort" then
-                    if not list_button_kept then
-                        list_button_kept = true
+                    sort_seen = sort_seen + 1
+                    if sort_seen == 1 then
                         button.text_func = function()
                             return "Komga: " .. KomgaBookshelf.listLabel(plugin, listMode(draft.source))
+                        end
+                        kept[#kept + 1] = button
+                    elseif sort_seen == 2 and is_all_series then
+                        button.text_func = function()
+                            return T(_("Sort: %1"), optionLabel(plugin, SERIES_SORTS, seriesSort(draft.source), "Title"))
                         end
                         kept[#kept + 1] = button
                     end
                 elseif r == "filters" then
                     button.text_func = function()
+                        if listMode(draft.source) == "all_series" then
+                            return T(_("Filter: %1"), seriesFilterSummary(plugin, draft.source))
+                        end
                         return T(_("Show: %1"), readFilterLabel(plugin, readFilter(draft.source)))
                     end
                     kept[#kept + 1] = button
@@ -1145,10 +1459,21 @@ local function installSourcePicker()
         local orig_pickSortLevel = Editor._pickSortLevel
         Editor._pickSortLevel = function(editor, draft, level, on_close, ...)
             if isKomgaDraft(draft) then
-                pickList(liveModule("kokomga"), listMode(draft.source), function(mode)
-                    draft.source.list = mode
+                local plugin = liveModule("kokomga")
+                local function done()
                     if type(on_close) == "function" then on_close() end
-                end)
+                end
+                if level == 2 and listMode(draft.source) == "all_series" then
+                    pickSort(plugin, seriesSort(draft.source), function(sort)
+                        draft.source.sort = sort
+                        done()
+                    end)
+                else
+                    pickList(plugin, listMode(draft.source), function(mode)
+                        draft.source.list = mode
+                        done()
+                    end)
+                end
                 return
             end
             return orig_pickSortLevel(editor, draft, level, on_close, ...)
@@ -1160,10 +1485,15 @@ local function installSourcePicker()
         local orig_openFilters = Editor._openFilters
         Editor._openFilters = function(editor, draft, on_close, ...)
             if isKomgaDraft(draft) then
-                pickReadFilter(liveModule("kokomga"), readFilter(draft.source), function(value)
-                    draft.source.read_status = value
-                    if type(on_close) == "function" then on_close() end
-                end)
+                local plugin = liveModule("kokomga")
+                if listMode(draft.source) == "all_series" then
+                    openSeriesFilters(plugin, draft, on_close)
+                else
+                    pickReadFilter(plugin, readFilter(draft.source), function(value)
+                        draft.source.read_status = value
+                        if type(on_close) == "function" then on_close() end
+                    end)
+                end
                 return
             end
             return orig_openFilters(editor, draft, on_close, ...)
@@ -1291,7 +1621,7 @@ function KomgaBookshelf.install(ui)
             local plugin = livePlugin()
             if not plugin then return {}, 0 end
             local ok, items, total = xpcall(function()
-                return buildView(plugin, listSpec(listMode(source), readFilter(source)),
+                return buildView(plugin, rootSpec(source),
                     offset or 0, limit or WANT_ALL_LIMIT, false, false)
             end, debug.traceback)
             if ok then return items, total end
@@ -1364,7 +1694,7 @@ function KomgaBookshelf.install(ui)
         Widget._refreshLibrary = function(widget, ...)
             local spec = livePlugin() and viewSpec(widget, TabModel)
             if spec then
-                local ok, err = pcall(refreshNow, spec)
+                local ok, err = pcall(refreshNow, spec, widget)
                 if ok then return end
                 logger.warn("KomgaBookshelf: refresh failed:", tostring(err))
             end
