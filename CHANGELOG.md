@@ -4,6 +4,10 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+### Fixed
+- **Progress Sync Error Message** (#13, thanks @PoebelPogge):
+  - Once Komga has accepted a book's reading progress, KOReader's own progress sync no longer also tries to push it, which failed with an error (e.g. HTTP 405) when the sync server isn't a KOSync server. If the Komga push fails or the device is offline, KOReader's sync still runs as before.
+
 ## [3.0.0] - 2026-09-25
 
 ### Added
