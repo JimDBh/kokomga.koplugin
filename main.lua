@@ -416,12 +416,16 @@ function KomgaPlugin:onReaderReady()
                 local book_id = self.sync:getOrMatchBook(current_filepath)
                 if book_id then
                     -- Pass ensure_networking = false to avoid duplicate willRerunWhenOnline prompts/queues.
-                    -- The chained native KOSync will trigger prompts if needed and rerun when online, re-triggering us.
-                    self.sync:pushProgressForDocument(self.ui, not interactive, false)
-                    return true
+                    -- Once Komga has accepted the progress, it owns this book: skip native KOSync, whose push
+                    -- would only fail against a server that isn't a KOSync server (e.g. HTTP 405).
+                    if self.sync:pushProgressForDocument(self.ui, not interactive, false) then
+                        return true
+                    end
+                    -- Not pushed (offline) or refused: fall back, so native KOSync can prompt and rerun when
+                    -- online, which re-triggers us and pushes to Komga then.
                 end
             end
-            
+
             -- Fallback to native KOSync
             logger.info("KomgaPlugin: Falling back to native KOSync:updateProgress")
             return self.orig_kosync_updateProgress(kosync_instance, ensure_networking, interactive, on_suspend)

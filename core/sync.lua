@@ -648,40 +648,40 @@ function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
 end
 
 -- Push progress to Komga
+-- Returns true once Komga has accepted the progress, false otherwise.
 function KomgaSync:pushProgress(book_id, current_page, total_pages, is_quiet)
-    if not self.plugin.api then return end
+    if not self.plugin.api then return false end
     local completed = current_page >= total_pages
     local success, err = self.plugin.api:patch_read_progress(book_id, current_page, completed)
     if success then
         logger.info("[Komga Sync] Saved page " .. current_page)
-    else
-        logger.err("[Komga Sync] Save failed: " .. tostring(err))
+        return true
     end
+    logger.err("[Komga Sync] Save failed: " .. tostring(err))
+    return false
 end
 
+-- Returns true once Komga has accepted the progress; false when the book isn't
+-- matched, the device is offline, or Komga refused it.
 function KomgaSync:pushProgressForDocument(ui, is_quiet, ensure_networking)
-    if not self.plugin.api or not ui or not ui.document then return end
+    if not self.plugin.api or not ui or not ui.document then return false end
     local filepath = ui.document.file
-    if not filepath then return end
-    
+    if not filepath then return false end
+
     local book_id = self:getOrMatchBook(filepath)
-    if not book_id then return end
+    if not book_id then return false end
     
     local current_page = ui.view and ui.view.state and ui.view.state.page or 1
     local total_pages = ui.view and ui.view.state and ui.view.state.page_count or (ui.document and ui.document.getPageCount and ui.document:getPageCount()) or current_page
     
-    local function do_push()
-        logger.info("KomgaSync: Executing pushProgress for book", book_id, "page", current_page)
-        self:pushProgress(book_id, current_page, total_pages, is_quiet)
-    end
-    
     local NetworkMgr = require("ui/network/manager")
     if not NetworkMgr:isOnline() then
         logger.info("KomgaSync: Network offline, silently skipping pushProgressForDocument.")
-        return
+        return false
     end
-    
-    do_push()
+
+    logger.info("KomgaSync: Executing pushProgress for book", book_id, "page", current_page)
+    return self:pushProgress(book_id, current_page, total_pages, is_quiet)
 end
 
 -- Helper to check if a filename has a valid (non-numeric) file extension
