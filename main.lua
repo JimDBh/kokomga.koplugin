@@ -407,6 +407,7 @@ function KomgaPlugin:onReaderReady()
                     -- Pass ensure_networking = false to avoid duplicate willRerunWhenOnline prompts/queues.
                     -- The chained native KOSync will trigger prompts if needed and rerun when online, re-triggering us.
                     self.sync:pushProgressForDocument(self.ui, not interactive, false)
+                    return true
                 end
             end
             
