@@ -897,6 +897,99 @@ function KomgaSync:downloadBooksSeq(books, index, on_done_callback)
     self:downloadBook(book, book.seriesTitle, next_step, next_step)
 end
 
+-- Deletes a chapter file the way KOReader's file browser does, except that the
+-- sidecar (.sdr: reading position, highlights, notes) is kept.
+local function deleteBookFile(path)
+    if not os.remove(path) then return false end
+    pcall(function() require("ui/widget/booklist").resetBookInfoCache(path) end)
+    pcall(function() require("readhistory"):fileDeleted(path) end)
+    pcall(function() require("readcollection"):removeItem(path) end)
+    return true
+end
+
+-- Finished on Komga, or marked finished in KOReader.
+function KomgaSync:isChapterFinished(book, path)
+    local progress = type(book.readProgress) == "table" and book.readProgress or nil
+    if progress and progress.completed == true then return true end
+    local DocSettings = require("docsettings")
+    if DocSettings:hasSidecarFile(path) then
+        local ok, doc_settings = pcall(DocSettings.open, DocSettings, path)
+        local summary = ok and doc_settings and doc_settings:readSetting("summary")
+        if type(summary) == "table" and summary.status == "complete" then return true end
+    end
+    return false
+end
+
+-- With "keep the last K chapters" set, deletes finished chapters of the series
+-- that fall outside the last K -- the chapter just opened counts as one. With
+-- K = 3, moving from 4 to 5 keeps 3, 4 and 5 and deletes 2 and earlier.
+-- Chapters are ordered by Komga's series order when online (which also covers
+-- books downloaded before the book index existed), by the book index offline.
+-- Only chapters at the path kokomga downloads to are touched.
+function KomgaSync:cleanupOlderChapters(current, keep)
+    local md = type(current.metadata) == "table" and current.metadata or {}
+    local series_id = type(current.seriesId) == "string" and current.seriesId or nil
+    local position = type(md.numberSort) == "number" and md.numberSort or nil
+    if not (series_id and position) then return end
+
+    local index = self.plugin.book_index
+    local books
+    local NetworkMgr = require("ui/network/manager")
+    if self.plugin.api and NetworkMgr:isOnline() then
+        local response = self.plugin.api:get_books_for_series(series_id,
+            { sort = "metadata.numberSort,asc" }, 0, 2000)
+        if type(response) == "table" and type(response.content) == "table" then
+            books = response.content
+            if index then pcall(index.recordBooks, books) end
+        end
+    end
+    if not books and index then books = index.booksInSeries(series_id) end
+    if not books then return end
+
+    -- Chapters before the one just opened, nearest first.
+    local earlier = {}
+    for _, book in ipairs(books) do
+        local book_md = type(book.metadata) == "table" and book.metadata or {}
+        local n = type(book_md.numberSort) == "number" and book_md.numberSort or nil
+        if n and n < position and type(book.id) == "string" and book.id ~= current.id then
+            earlier[#earlier + 1] = { book = book, n = n }
+        end
+    end
+    table.sort(earlier, function(a, b) return a.n > b.n end)
+
+    local lfs = require("libs/libkoreader-lfs")
+    local removed = 0
+    -- earlier[1 .. keep-1] stay; everything from earlier[keep] on may go.
+    for i = keep, #earlier do
+        local book = earlier[i].book
+        local series_title = type(book.seriesTitle) == "string" and book.seriesTitle or nil
+        local ok, path = pcall(self.getBookLocalPath, self, book, series_title)
+        if ok and path and lfs.attributes(path, "mode") == "file"
+                and self:isChapterFinished(book, path) and deleteBookFile(path) then
+            removed = removed + 1
+            logger.info("KomgaSync: Removed finished chapter:", path)
+        end
+    end
+
+    if removed > 0 then
+        local T = self.plugin.i18n.T
+        local _ = self.plugin.i18n._
+        self.plugin:notify(T(_("Removed finished chapters: %1"), removed), "info")
+    end
+end
+
+-- Runs the cleanup shortly after the next chapter opens, once the chapter just
+-- left is closed and its progress has been pushed.
+function KomgaSync:scheduleChapterCleanup(current)
+    local keep = tonumber(self.plugin.settings.keep_recent_chapters) or 0
+    if keep <= 0 or type(current) ~= "table" then return end
+    local UIManager = require("ui/uimanager")
+    UIManager:scheduleIn(2, function()
+        local ok, err = pcall(self.cleanupOlderChapters, self, current, math.floor(keep))
+        if not ok then logger.warn("KomgaSync: chapter cleanup failed:", tostring(err)) end
+    end)
+end
+
 -- The book after book_id, and where the answer came from: "index" when the
 -- book index already knows it (works offline, and saves a round trip online),
 -- "network" when the server was asked, "none" when there is no next book, or
@@ -1042,6 +1135,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
             local filemanagerutil = require("apps/filemanager/filemanagerutil")
             self:cancelReadestPendingSync(ui)
             filemanagerutil.openFile(ui, local_path)
+            self:scheduleChapterCleanup(next_book)
         end)
         return true
     end
@@ -1070,6 +1164,7 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
                                 local filemanagerutil = require("apps/filemanager/filemanagerutil")
                                 self:cancelReadestPendingSync(ui)
                                 filemanagerutil.openFile(ui, path)
+                                self:scheduleChapterCleanup(next_book)
                             end)
                         end
 

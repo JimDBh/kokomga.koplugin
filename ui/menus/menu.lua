@@ -104,6 +104,19 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    text_func = function()
+                        local keep = tonumber(self.plugin.settings.keep_recent_chapters) or 0
+                        if keep <= 0 then
+                            return _("Remove finished chapters: Off")
+                        end
+                        return T(_("Remove finished chapters: keep last %1"), keep)
+                    end,
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        self:promptInput(_("Keep the last N chapters (0 to keep all)"), "keep_recent_chapters", true, touchmenu_instance)
+                    end
+                },
+                {
                     text = _("Skip end-of-book prompt (directly open next book)"),
                     checked_func = function() return self.plugin.settings.skip_end_of_book_prompt end,
                     keep_menu_open = true,

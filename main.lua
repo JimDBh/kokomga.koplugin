@@ -63,7 +63,8 @@ local DEFAULT_SETTINGS = {
     auto_rtl_direction = false,
     auto_download_next = 0,
     skip_end_of_book_prompt = false,
-    disable_readest_sync_for_komga = false
+    disable_readest_sync_for_komga = false,
+    keep_recent_chapters = 0
 }
 
 -- Readest's per-book sync entry points. Everything here acts on the currently

@@ -146,6 +146,10 @@ local translations = {
         ["Couldn't load this book from Komga."] = "无法从 Komga 加载此书。",
         ["Refreshing Komga…"] = "正在刷新 Komga…",
         ["Couldn't refresh from Komga."] = "无法从 Komga 刷新。",
+        ["Remove finished chapters: Off"] = "删除已读章节：关闭",
+        ["Remove finished chapters: keep last %1"] = "删除已读章节：保留最近 %1 章",
+        ["Keep the last N chapters (0 to keep all)"] = "保留最近 N 章（输入 0 保留全部）",
+        ["Removed finished chapters: %1"] = "已删除已读章节：%1",
         ["Browse Komga library"] = "浏览 Komga 图书馆"
     }
 }
@@ -291,6 +295,10 @@ translations["zh_TW"] = {
     ["Couldn't load this book from Komga."] = "無法從 Komga 載入此書。",
     ["Refreshing Komga…"] = "正在重新整理 Komga…",
     ["Couldn't refresh from Komga."] = "無法從 Komga 重新整理。",
+    ["Remove finished chapters: Off"] = "刪除已讀章節：關閉",
+    ["Remove finished chapters: keep last %1"] = "刪除已讀章節：保留最近 %1 章",
+    ["Keep the last N chapters (0 to keep all)"] = "保留最近 N 章（輸入 0 保留全部）",
+    ["Removed finished chapters: %1"] = "已刪除已讀章節：%1",
     ["Browse Komga library"] = "瀏覽 Komga 圖書館"
 }
 
@@ -435,6 +443,10 @@ translations["ja"] = {
     ["Couldn't load this book from Komga."] = "Komga からこの本を読み込めませんでした。",
     ["Refreshing Komga…"] = "Komga を更新中…",
     ["Couldn't refresh from Komga."] = "Komga から更新できませんでした。",
+    ["Remove finished chapters: Off"] = "読了した章を削除：オフ",
+    ["Remove finished chapters: keep last %1"] = "読了した章を削除：直近 %1 章を残す",
+    ["Keep the last N chapters (0 to keep all)"] = "直近 N 章を残す（0 ですべて残す）",
+    ["Removed finished chapters: %1"] = "読了した章を削除しました：%1",
     ["Browse Komga library"] = "Komgaライブラリを閲覧"
 }
 
@@ -579,6 +591,10 @@ translations["es"] = {
     ["Couldn't load this book from Komga."] = "No se pudo cargar este libro desde Komga.",
     ["Refreshing Komga…"] = "Actualizando Komga…",
     ["Couldn't refresh from Komga."] = "No se pudo actualizar desde Komga.",
+    ["Remove finished chapters: Off"] = "Eliminar capítulos leídos: desactivado",
+    ["Remove finished chapters: keep last %1"] = "Eliminar capítulos leídos: conservar los últimos %1",
+    ["Keep the last N chapters (0 to keep all)"] = "Conservar los últimos N capítulos (0 para conservar todos)",
+    ["Removed finished chapters: %1"] = "Capítulos leídos eliminados: %1",
     ["Browse Komga library"] = "Examinar biblioteca de Komga"
 }
 

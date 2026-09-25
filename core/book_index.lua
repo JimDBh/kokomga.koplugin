@@ -76,6 +76,24 @@ function BookIndex.recordBook(book)
     save(all)
 end
 
+-- Records many books with one write, e.g. a whole series fetched from Komga.
+function BookIndex.recordBooks(list)
+    if type(list) ~= "table" then return end
+    local all = books()
+    local changed = false
+    for _, book in ipairs(list) do
+        local trimmed = BookIndex.trim(book)
+        if trimmed then
+            local previous = all[trimmed.id]
+            trimmed.next_id = previous and previous.next_id
+            trimmed.next_checked = previous and previous.next_checked
+            all[trimmed.id] = trimmed
+            changed = true
+        end
+    end
+    if changed then save(all) end
+end
+
 -- Records what follows book_id: next_book, or nil when the server said there
 -- is none (the book was the last in its series when checked).
 function BookIndex.recordNext(book_id, next_book)
