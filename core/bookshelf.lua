@@ -527,6 +527,84 @@ local function scheduleRefresh(section, key, fetch)
 end
 
 -- ---------------------------------------------------------------------------
+-- Series summaries
+-- ---------------------------------------------------------------------------
+
+-- Chapters rarely have a summary of their own, so a book shows its series'
+-- summary instead. Summaries are remembered from every series list fetched,
+-- and looked up for the books on screen whose series has not been seen.
+local SUMMARY_CAP = 300          -- series summaries remembered
+local summary_attempted = {}     -- series id -> true; looked up once per session
+local summaries_pending = false
+
+local function seriesSummaries()
+    local entry = readEntry("meta", "series_summaries")
+    return entry and entry.items or {}
+end
+
+-- Komga sends an empty summary as "", which Lua counts as true: treat it as
+-- none, or it hides the series' summary.
+local function nonEmpty(s)
+    return type(s) == "string" and s:match("%S") and s or nil
+end
+
+-- Remembers { id, summary } records; "" marks a series known to have none. A
+-- series cached before summaries were kept has no summary field at all, and is
+-- left unknown so it is still looked up.
+local function rememberSummaries(list)
+    local map = seriesSummaries()
+    local changed = false
+    for _i, series in ipairs(list) do
+        if type(series.id) == "string" and type(series.summary) == "string" then
+            local value = nonEmpty(series.summary) or ""
+            if not map[series.id] or map[series.id].s ~= value then
+                map[series.id] = { s = value, t = os.time() }
+                changed = true
+            end
+        end
+    end
+    if not changed then return end
+    local ids = {}
+    for id, v in pairs(map) do ids[#ids + 1] = { id = id, t = v.t or 0 } end
+    if #ids > SUMMARY_CAP then
+        table.sort(ids, function(a, b) return a.t > b.t end)
+        for i = SUMMARY_CAP + 1, #ids do map[ids[i].id] = nil end
+    end
+    writeEntry("meta", "series_summaries", { fetched_at = os.time(), items = map })
+end
+
+-- The series' summary, and whether the series has been seen at all.
+local function seriesSummary(series_id)
+    local v = type(series_id) == "string" and seriesSummaries()[series_id] or nil
+    return v and v.s ~= "" and v.s or nil, v ~= nil
+end
+
+-- Looks up the series of books on screen that have not been seen yet, then
+-- repaints. Each series is tried once per session.
+local function scheduleSummaries(series_ids)
+    if summaries_pending or #series_ids == 0 or not isOnline() then return end
+    for _i, id in ipairs(series_ids) do summary_attempted[id] = true end
+    summaries_pending = true
+    UIManager:nextTick(function()
+        summaries_pending = false
+        local plugin = livePlugin()
+        if not plugin then return end
+        local found = {}
+        for _i, id in ipairs(series_ids) do
+            local ok, series = pcall(plugin.api.get_series_detail, plugin.api, id)
+            if ok and type(series) == "table" then
+                local item = trimSeries(series)
+                if item.id then found[#found + 1] = item end
+            end
+        end
+        if #found > 0 then
+            rememberSummaries(found)
+            rebuildShelf()
+        end
+    end)
+end
+
+-- ---------------------------------------------------------------------------
 -- Covers
 -- ---------------------------------------------------------------------------
 
@@ -637,10 +715,10 @@ local function bookRecord(plugin, dto, fallback_summary)
         authors = #authors > 0 and authors or nil,
         series_name = dto.seriesTitle,
         series_num = md.number and tostring(md.number) or nil,
-        -- The hero card's description. (No page_count: Bookshelf draws its
-        -- page-count pill in the corner the downloaded tick uses, and the pill
-        -- wins.)
-        description = md.summary or fallback_summary,
+        -- The hero card's description: the book's own summary, else its
+        -- series'. (No page_count: Bookshelf draws its page-count pill in the
+        -- corner the downloaded tick uses, and the pill wins.)
+        description = nonEmpty(md.summary) or seriesSummary(dto.seriesId) or nonEmpty(fallback_summary),
         book_pct = pct,
         percent_finished = pct,
         status = status,
@@ -868,17 +946,19 @@ local function buildPagedView(plugin, spec, offset, limit, allow_network, want_a
         end
     end
 
-    local items, missing = {}, {}
+    local items, missing, shown_series = {}, {}, {}
     for i = offset + 1, stop do
         local entry = pages[math.floor((i - 1) / PAGE_SIZE)]
         local dto = entry and entry.items and entry.items[(i - 1) % PAGE_SIZE + 1]
         if dto then
             local item = seriesItem(dto)
             if not item.first_book then noteMissingCover(missing, "series", dto) end
+            shown_series[#shown_series + 1] = dto
             items[#items + 1] = item
         end
     end
 
+    if #shown_series > 0 then rememberSummaries(shown_series) end
     if allow_network and not want_all then scheduleCovers(missing) end
     logger.dbg("KomgaBookshelf: paged view", spec.key, "->", #items, "of", tostring(total),
         "items, offset", offset)
@@ -908,11 +988,13 @@ local function buildView(plugin, spec, offset, limit, allow_network, want_all)
         all = kept
     end
     local page, missing = {}, {}
+    local shown_series, unknown_series, asked = {}, {}, {}
     for i = offset + 1, math.min(offset + limit, #all) do
         local dto = all[i]
         if spec.item_type == "series" then
             local item = seriesItem(dto)
             if not item.first_book then noteMissingCover(missing, "series", dto) end
+            shown_series[#shown_series + 1] = dto
             page[#page + 1] = item
         elseif spec.item_type == "collection" then
             local item = collectionItem(dto)
@@ -921,11 +1003,24 @@ local function buildView(plugin, spec, offset, limit, allow_network, want_all)
         else
             local record = bookRecord(plugin, dto, spec.series_summary)
             if not record.cover_image_path then noteMissingCover(missing, "book", dto) end
+            -- A book without a summary of its own whose series has not been
+            -- seen: look the series up, once per series.
+            local series_id = dto.seriesId
+            if not nonEmpty(dto.metadata and dto.metadata.summary) and series_id
+                    and not asked[series_id] and not summary_attempted[series_id]
+                    and not select(2, seriesSummary(series_id)) then
+                asked[series_id] = true
+                unknown_series[#unknown_series + 1] = series_id
+            end
             page[#page + 1] = record
         end
     end
 
-    if allow_network and not want_all then scheduleCovers(missing) end
+    if #shown_series > 0 then rememberSummaries(shown_series) end
+    if allow_network and not want_all then
+        scheduleCovers(missing)
+        scheduleSummaries(unknown_series)
+    end
     logger.dbg("KomgaBookshelf: view", spec.section, tostring(spec.key), "->", #page,
         "of", #all, "items, offset", offset, entry and "" or "(not fetched yet)")
     return page, #all

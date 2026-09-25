@@ -328,6 +328,10 @@ function KomgaAPI:query_series(opts)
     return self:request("/api/v1/series" .. q)
 end
 
+function KomgaAPI:get_series_detail(series_id)
+    return self:request("/api/v1/series/" .. escape_uri(series_id))
+end
+
 function KomgaAPI:get_book(book_id)
     return self:request("/api/v1/books/" .. escape_uri(book_id))
 end
