@@ -78,6 +78,41 @@ local READEST_PER_BOOK_METHODS = {
     "touchOpenBook",  "pushOpenBook",
 }
 
+-- The Komga book KOSync is syncing right now, as { ui, interactive }: set only
+-- while our KOSync:updateProgress / getProgress wrappers run, since KOSync makes
+-- its server call within them.
+local komga_sync_active = nil
+
+-- The page on screen, as pushProgressForDocument sends it to Komga.
+local function currentPage(ui)
+    return ui and ui.view and ui.view.state and ui.view.state.page
+end
+
+-- Stands in for a KOSync account while KOSync syncs a Komga book. It never
+-- reaches a KOSync server: that sync goes to Komga.
+local KOMGA_KOSYNC_ACCOUNT = "kokomga"
+
+-- Runs a native KOSync sync method for a Komga book, as if logged in to KOSync:
+-- a Komga book needs no KOSync account. The stand-in lasts for this call only.
+-- KOSync writes nothing to its settings while syncing, and they are restored
+-- before anything can save them.
+local function runForKomgaBook(ui, native, kosync_instance, interactive, ...)
+    local settings = kosync_instance.settings
+    local saved_username, saved_userkey = settings.username, settings.userkey
+    if not (saved_username and saved_userkey) then
+        settings.username, settings.userkey = KOMGA_KOSYNC_ACCOUNT, KOMGA_KOSYNC_ACCOUNT
+    end
+    local previous = komga_sync_active
+    komga_sync_active = { ui = ui, interactive = interactive }
+
+    local ok, result = pcall(native, kosync_instance, ...)
+
+    komga_sync_active = previous
+    settings.username, settings.userkey = saved_username, saved_userkey
+    if not ok then error(result, 0) end
+    return result
+end
+
 -- Readest stores progress as the string "[current,total]".
 local function readestProgressTotal(progress)
     if type(progress) ~= "string" then return nil end
@@ -293,6 +328,62 @@ function KomgaPlugin:installReadestGuard()
     logger.info("KomgaPlugin: Readest applyBookConfig guard installed")
 end
 
+-- KOSync hands every sync to its server client -- KOSyncClient:update_progress
+-- and :get_progress, looked up on the module at call time. Replace those two
+-- calls: for a Komga book synced through our wrappers, the sync goes to Komga,
+-- and KOSync's server never sees the book. Installed once per session, as the
+-- module is shared; both or neither.
+function KomgaPlugin:installKOSyncClientHooks()
+    if KomgaPlugin._kosync_client_hooked then return true end
+
+    local ok, KOSyncClient = pcall(require, "KOSyncClient")
+    if not ok or type(KOSyncClient) ~= "table"
+            or type(KOSyncClient.update_progress) ~= "function"
+            or type(KOSyncClient.get_progress) ~= "function" then
+        logger.warn("KomgaPlugin: KOSyncClient unavailable, Komga books won't sync progress through KOSync")
+        return false
+    end
+    KomgaPlugin._kosync_client_hooked = true
+
+    local function activePlugin()
+        local active = komga_sync_active
+        local plugin = active and active.ui and active.ui.kokomga
+        if plugin and plugin.sync then return plugin, active end
+    end
+
+    -- Push: KOSync gets Komga's answer through its own callback, so it reports
+    -- it as it would its own.
+    local orig_update_progress = KOSyncClient.update_progress
+    KOSyncClient.update_progress = function(client, username, userkey, document, metadata,
+                                            progress, percentage, device, device_id, callback)
+        local plugin, active = activePlugin()
+        if not plugin then
+            return orig_update_progress(client, username, userkey, document, metadata,
+                progress, percentage, device, device_id, callback)
+        end
+        local pushed = plugin.sync:pushProgressForDocument(active.ui, true, false)
+        logger.info("KomgaPlugin: KOSync push sent to Komga instead, accepted=" .. tostring(pushed))
+        if pushed then plugin.komga_pushed_page = currentPage(active.ui) end
+        if type(callback) == "function" then callback(pushed, nil) end
+    end
+
+    -- Pull: Komga's progress is a page, not KOSync's position and percentage, so
+    -- kokomga's own pull decides whether to jump and reports it. KOSync's
+    -- callback is not called: there is nothing left for KOSync to do.
+    local orig_get_progress = KOSyncClient.get_progress
+    KOSyncClient.get_progress = function(client, username, userkey, document, callback)
+        local plugin, active = activePlugin()
+        if not plugin then
+            return orig_get_progress(client, username, userkey, document, callback)
+        end
+        local pulled = plugin.sync:pullProgress(active.ui, active.interactive, false)
+        logger.info("KomgaPlugin: KOSync pull taken from Komga instead, succeeded=" .. tostring(pulled))
+    end
+
+    logger.info("KomgaPlugin: KOSync client hooks installed")
+    return true
+end
+
 -- "Disable Readest sync for Komga books": no-op Readest's per-book sync for any
 -- document we manage, even when Readest auto-sync is enabled globally. Wrappers
 -- go on the per-document instance, so books we do not manage are untouched.
@@ -380,55 +471,50 @@ function KomgaPlugin:onReaderReady()
         end
     end)
     
-    if self.ui.kosync and not self.orig_kosync_getProgress then
+    -- A Komga book goes through native KOSync:getProgress / updateProgress
+    -- untouched -- KOSync keeps deciding when to sync, bringing the network up,
+    -- reporting the result and turning Wi-Fi back off after a push on suspend --
+    -- except that the sync goes to Komga (see installKOSyncClientHooks), and that
+    -- it needs no KOSync account.
+    if self.ui.kosync and not self.orig_kosync_updateProgress and self:installKOSyncClientHooks() then
         self.orig_kosync_getProgress = self.ui.kosync.getProgress
-        
-        self.ui.kosync.getProgress = function(kosync_instance, ensure_networking, interactive)
-            logger.info("KomgaPlugin: Intercepted KOSync:getProgress (ensure_networking=" .. tostring(ensure_networking) .. ")")
-            
-            local current_filepath = self.ui.document and self.ui.document.file
-            local book_id = current_filepath and self.sync:getOrMatchBook(current_filepath)
-            
-            local NetworkMgr = require("ui/network/manager")
-            if NetworkMgr:isOnline() and book_id then
-                local success = self.sync:pullProgress(self.ui, interactive, false)
-                if success then
-                    logger.info("KomgaPlugin: Intercepted KOSync and pulled progress from Komga")
-                    return
-                end
-            end
-            
-            -- Fallback to native KOSync when offline, not matched, or pull failed.
-            -- This allows native KOSync to handle queueing and prompting, and once online,
-            -- it will trigger getProgress again, which we will intercept while online.
-            logger.info("KomgaPlugin: Falling back to native KOSync:getProgress")
-            return self.orig_kosync_getProgress(kosync_instance, ensure_networking, interactive)
-        end
-    end
-
-    if self.ui.kosync and not self.orig_kosync_updateProgress then
         self.orig_kosync_updateProgress = self.ui.kosync.updateProgress
-        
-        self.ui.kosync.updateProgress = function(kosync_instance, ensure_networking, interactive, on_suspend)
-            logger.info("KomgaPlugin: Intercepted KOSync:updateProgress (ensure_networking=" .. tostring(ensure_networking) .. ")")
-            local current_filepath = self.ui.document and self.ui.document.file
-            if current_filepath then
-                local book_id = self.sync:getOrMatchBook(current_filepath)
-                if book_id then
-                    -- Pass ensure_networking = false to avoid duplicate willRerunWhenOnline prompts/queues.
-                    -- Once Komga has accepted the progress, it owns this book: skip native KOSync, whose push
-                    -- would only fail against a server that isn't a KOSync server (e.g. HTTP 405).
-                    if self.sync:pushProgressForDocument(self.ui, not interactive, false) then
-                        return true
-                    end
-                    -- Not pushed (offline) or refused: fall back, so native KOSync can prompt and rerun when
-                    -- online, which re-triggers us and pushes to Komga then.
-                end
-            end
 
-            -- Fallback to native KOSync
-            logger.info("KomgaPlugin: Falling back to native KOSync:updateProgress")
-            return self.orig_kosync_updateProgress(kosync_instance, ensure_networking, interactive, on_suspend)
+        -- The Komga book to sync with Komga, if any. With "Use Komga server progress"
+        -- off, there is none: every book syncs through KOSync as usual.
+        local function komgaBookId()
+            if not self.settings.use_komga_sync then return nil end
+            local current_filepath = self.ui.document and self.ui.document.file
+            return current_filepath and self.sync:getOrMatchBook(current_filepath)
+        end
+
+        self.ui.kosync.getProgress = function(kosync_instance, ensure_networking, interactive)
+            local book_id = komgaBookId()
+            if not book_id then
+                return self.orig_kosync_getProgress(kosync_instance, ensure_networking, interactive)
+            end
+            logger.info("KomgaPlugin: KOSync:getProgress for Komga book " .. tostring(book_id)
+                .. " (ensure_networking=" .. tostring(ensure_networking) .. ")")
+            return runForKomgaBook(self.ui, self.orig_kosync_getProgress, kosync_instance, interactive,
+                ensure_networking, interactive)
+        end
+
+        self.ui.kosync.updateProgress = function(kosync_instance, ensure_networking, interactive, on_suspend)
+            local book_id = komgaBookId()
+            if not book_id then
+                return self.orig_kosync_updateProgress(kosync_instance, ensure_networking, interactive, on_suspend)
+            end
+            logger.info("KomgaPlugin: KOSync:updateProgress for Komga book " .. tostring(book_id)
+                .. " (ensure_networking=" .. tostring(ensure_networking) .. ")")
+            -- KOSync skips an automatic push within 25s of the last one, which would
+            -- leave Komga pages behind when a book is closed or the device sleeps
+            -- right after a periodic push. Let a push through whenever the page has
+            -- moved since Komga last accepted one; the same page stays debounced.
+            if not interactive and currentPage(self.ui) ~= self.komga_pushed_page then
+                kosync_instance.push_timestamp = 0
+            end
+            return runForKomgaBook(self.ui, self.orig_kosync_updateProgress, kosync_instance, interactive,
+                ensure_networking, interactive, on_suspend)
         end
     end
 

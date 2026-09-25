@@ -20,10 +20,12 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 ### Changed
 - **Offline Next-Chapter Transitions**:
   - kokomga now remembers each book's next book, so a downloaded next chapter opens at the end of a book even without a connection, and faster when online.
+- **Komga Progress Option**:
+  - "Use Komga server progress when available" now covers sending progress too, not only fetching it. When it is off, Komga books sync through KOReader's progress sync like any other book.
 
 ### Fixed
 - **Progress Sync Error Message** (#13, thanks @PoebelPogge):
-  - Once Komga has accepted a book's reading progress, KOReader's own progress sync no longer also tries to push it, which failed with an error (e.g. HTTP 405) when the sync server isn't a KOSync server. If the Komga push fails or the device is offline, KOReader's sync still runs as before.
+  - KOReader's progress sync now syncs a Komga book with Komga only, never with the KOSync server, where it failed with an error (e.g. HTTP 405) when that server isn't a KOSync server. KOReader still decides when to sync, connects to Wi-Fi for it (and disconnects again after a push on suspend), and reports the result. Komga books no longer need a KOSync account for this.
 
 ## [2.2.0] - 2026-09-20
 ### Added
