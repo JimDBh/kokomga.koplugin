@@ -42,6 +42,14 @@ For detailed installation guides, configuration walk-throughs, troubleshooting, 
     <td><a href="screenshots/options_screenshot.png"><img src="screenshots/options_screenshot.png" alt="Options & Setup"></a></td>
     <td><a href="screenshots/auto_download_next.png"><img src="screenshots/auto_download_next.png" alt="Auto-Download Next Chapter"></a></td>
   </tr>
+  <tr>
+    <th>Bookshelf: Komga Series</th>
+    <th>Bookshelf: Series Chapters</th>
+  </tr>
+  <tr>
+    <td><a href="screenshots/bookshelf_series.png"><img src="screenshots/bookshelf_series.png" alt="Komga series in Bookshelf, with unread / total badges"></a></td>
+    <td><a href="screenshots/bookshelf_chapters.png"><img src="screenshots/bookshelf_chapters.png" alt="A Komga series' chapters in Bookshelf"></a></td>
+  </tr>
 </table>
 
 
