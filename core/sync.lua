@@ -837,7 +837,8 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
             self.plugin:saveSettings()
             
             pcall(save_book_metadata, local_path, book, series_title)
-            
+            if self.plugin.book_index then pcall(self.plugin.book_index.recordBook, book) end
+
             -- Move file into place after sidecar metadata is fully written
             local os = require("os")
             os.rename(tmp_path, local_path)
@@ -896,6 +897,52 @@ function KomgaSync:downloadBooksSeq(books, index, on_done_callback)
     self:downloadBook(book, book.seriesTitle, next_step, next_step)
 end
 
+-- The book after book_id, and where the answer came from: "index" when the
+-- book index already knows it (works offline, and saves a round trip online),
+-- "network" when the server was asked, "none" when there is no next book, or
+-- "offline" when nothing is known and the server can't be reached.
+function KomgaSync:resolveNextBook(book_id)
+    local index = self.plugin.book_index
+    local known = index and index.getNext(book_id)
+    if known then return known, "index" end
+
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isOnline() then
+        return nil, known == false and "none" or "offline"
+    end
+
+    -- A 404 means the book is the last in its series. Any other failure says
+    -- nothing about the series, so it is not recorded.
+    local next_book, err = self.plugin.api:get_next_book(book_id)
+    if index and (next_book or tostring(err or ""):find("404", 1, true)) then
+        pcall(index.recordNext, book_id, next_book)
+    end
+    return next_book, next_book and "network" or "none"
+end
+
+-- Learns what follows the book at filepath while it is being read, so the
+-- end-of-book flow can open the next chapter without the server. Asks only for
+-- what the index lacks; a book last seen as the end of its series is checked
+-- again, since a new chapter may have been added since.
+function KomgaSync:rememberNextBook(filepath)
+    local index = self.plugin.book_index
+    if not (index and self.plugin.api and filepath) then return end
+    local book_id = self:getOrMatchBook(filepath)
+    if not book_id then return end
+    if index.getBook(book_id) and index.getNext(book_id) then return end
+
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isOnline() then return end
+
+    if not index.getBook(book_id) then
+        local book = self.plugin.api:get_book(book_id)
+        if type(book) == "table" then pcall(index.recordBook, book) end
+    end
+    if not index.getNext(book_id) then
+        self:resolveNextBook(book_id)
+    end
+end
+
 function KomgaSync:promptNextChapter(ui, show_native_func)
     if not self.plugin.api or not ui or not ui.document then return end
     local filepath = ui.document.file
@@ -932,11 +979,14 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
         end
     end
 
-    local NetworkMgr = require("ui/network/manager")
     local UIManager = require("ui/uimanager")
     local ButtonDialog = require("ui/widget/buttondialog")
 
-    if not NetworkMgr:isOnline() then
+    -- From the book index when known, so a downloaded next chapter opens even
+    -- offline; otherwise from the server.
+    local next_book, next_source = self:resolveNextBook(book_id)
+
+    if not next_book and next_source == "offline" then
         local dialog
         dialog = ButtonDialog:new{
             title = _("No Wi-Fi connection. Cannot check for the next chapter."),
@@ -970,9 +1020,6 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
         UIManager:show(dialog)
         return true
     end
-
-    -- Get the next book directly using Komga's native endpoint (404 → nil = no next book)
-    local next_book = self.plugin.api:get_next_book(book_id)
 
     if not next_book then
         logger.info("KomgaSync: No next chapter found.")
@@ -1028,6 +1075,17 @@ function KomgaSync:promptNextChapter(ui, show_native_func)
 
                         if is_downloaded then
                             open_doc(local_path)
+                        elseif next_book._trimmed then
+                            -- Known from the book index, which keeps only what
+                            -- locating the file needs: fetch the full book so the
+                            -- download writes its complete metadata.
+                            local full = self.plugin.api:get_book(next_book.id)
+                            if type(full) == "table" and type(full.id) == "string" then
+                                local full_series = type(full.seriesTitle) == "string" and full.seriesTitle or nil
+                                self:downloadBook(full, full_series, open_doc)
+                            else
+                                self.plugin:notify(_("Couldn't load this book from Komga."), "error")
+                            end
                         else
                             self:downloadBook(next_book, series_title, open_doc)
                         end
@@ -1168,9 +1226,17 @@ function KomgaSync:preDownloadNextBook(filepath)
             local downloaded_books = {}
             local already_downloaded_count = 0
             local errors = {}
+            -- Each "this book is followed by that one" found along the way,
+            -- handed back so the parent can record it in the book index (the
+            -- index is only ever written by the parent).
+            local links = {}
+            local book_index = self.plugin.book_index
 
             for step = 1, download_count do
                 local next_book = self.plugin.api:get_next_book(current_id)
+                if next_book and book_index then
+                    links[#links + 1] = { from = current_id, next = book_index.trim(next_book) }
+                end
                 if not next_book then
                     logger.info("KomgaSync bg: No next chapter found after book ID " .. tostring(current_id))
                     break
@@ -1220,6 +1286,7 @@ function KomgaSync:preDownloadNextBook(filepath)
                 status = "success",
                 downloaded = downloaded_books,
                 already_downloaded = already_downloaded_count,
+                links = links,
                 errors = errors
             }
         end)
@@ -1284,6 +1351,14 @@ function KomgaSync:collectBgDownloads()
             local ok, result = pcall(JSON.decode, ret_str)
             if ok and result and type(result) == "table" then
                 if result.status == "success" then
+                    local book_index = self.plugin.book_index
+                    if book_index and type(result.links) == "table" then
+                        for _, link in ipairs(result.links) do
+                            if type(link) == "table" and type(link.from) == "string" and type(link.next) == "table" then
+                                pcall(book_index.recordNext, link.from, link.next)
+                            end
+                        end
+                    end
                     if result.downloaded and #result.downloaded > 0 then
                         for _, item in ipairs(result.downloaded) do
                             -- Update matched_books_cache in the parent process

@@ -29,6 +29,7 @@ local KomgaCache = require(plugin_dir .. "core/cache")
 local KomgaSync = require(plugin_dir .. "core/sync")
 local KomgaMenu = require(plugin_dir .. "ui/menus/menu")
 local KomgaBookshelf = require(plugin_dir .. "core/bookshelf")
+local KomgaBookIndex = require(plugin_dir .. "core/book_index")
 local i18n = require(plugin_dir .. "core/i18n")
 
 local KomgaPlugin = WidgetContainer:extend{
@@ -95,6 +96,7 @@ function KomgaPlugin:init()
     self.sync = KomgaSync:new(self)
     self.menu = KomgaMenu:new(self)
     self.bookshelf = KomgaBookshelf
+    self.book_index = KomgaBookIndex
 
     self.ui.menu:registerToMainMenu(self)
     self:registerEvents()
@@ -368,6 +370,14 @@ function KomgaPlugin:onReaderReady()
     if self.settings.auto_download_next and self.settings.auto_download_next > 0 then
         self.sync:preDownloadNextBook(filepath)
     end
+
+    -- Learn what follows this book while it is read, so the end-of-book flow
+    -- can open the next chapter without the server. Deferred past the open.
+    UIManager:scheduleIn(2, function()
+        if self.ui and self.ui.document and self.ui.document.file == filepath then
+            pcall(self.sync.rememberNextBook, self.sync, filepath)
+        end
+    end)
     
     if self.ui.kosync and not self.orig_kosync_getProgress then
         self.orig_kosync_getProgress = self.ui.kosync.getProgress
