@@ -328,6 +328,7 @@ local function trimSeries(series)
     return {
         id = asString(series.id),
         title = asString(md.title) or asString(series.name),
+        summary = asString(md.summary),
         lastModified = asString(series.lastModified),
         -- Komga's own tallies, for the unread badge, the read state and the
         -- read-status filter.
@@ -598,7 +599,9 @@ local function bookStatus(dto)
 end
 
 -- A book, shaped like the records Bookshelf's own Kobo source produces.
-local function bookRecord(plugin, dto)
+-- fallback_summary is the series' summary, shown when the book has none of its
+-- own -- chapters rarely do.
+local function bookRecord(plugin, dto, fallback_summary)
     local md = dto.metadata or {}
     local title = md.title or dto.name or "?"
     local local_path = localPathIfDownloaded(plugin, dto)
@@ -618,6 +621,10 @@ local function bookRecord(plugin, dto)
         authors = #authors > 0 and authors or nil,
         series_name = dto.seriesTitle,
         series_num = md.number and tostring(md.number) or nil,
+        -- The hero card's description. (No page_count: Bookshelf draws its
+        -- page-count pill in the corner the downloaded tick uses, and the pill
+        -- wins.)
+        description = md.summary or fallback_summary,
         book_pct = pct,
         percent_finished = pct,
         status = status,
@@ -660,6 +667,7 @@ local function seriesItem(dto)
         label = title,
         komga_series_id = dto.id,
         komga_series_title = title,
+        komga_series_summary = dto.summary,
         -- For the unread badge (see the FolderStack hook).
         komga_total = dto.booksCount,
         komga_unread = dto.booksUnreadCount,
@@ -730,9 +738,10 @@ local function listSpec(mode, filter)
     }
 end
 
-local function seriesSpec(series_id, filter)
+local function seriesSpec(series_id, filter, series_summary)
     return {
         section = "series", key = series_id, item_type = "book", filter = filter,
+        series_summary = series_summary,
         fetch = function(plugin) return fetchSeriesBooks(plugin, series_id) end,
     }
 end
@@ -884,7 +893,7 @@ local function buildView(plugin, spec, offset, limit, allow_network, want_all)
             if not item.first_book then noteMissingCover(missing, "collection", dto) end
             page[#page + 1] = item
         else
-            local record = bookRecord(plugin, dto)
+            local record = bookRecord(plugin, dto, spec.series_summary)
             if not record.cover_image_path then noteMissingCover(missing, "book", dto) end
             page[#page + 1] = record
         end
@@ -911,7 +920,7 @@ local function viewSpec(widget, TabModel)
     if tip then
         local payload = type(tip.payload) == "table" and tip.payload or {}
         if tip.kind == SERIES_DRILL and payload.series_id then
-            return seriesSpec(payload.series_id, filter)
+            return seriesSpec(payload.series_id, filter, payload.series_summary)
         end
         if tip.kind == COLLECTION_DRILL and payload.collection_id then
             return collectionSpec(payload.collection_id, filter)
@@ -1025,8 +1034,7 @@ local function showBookInfo(widget, plugin, record, open)
     -- records never look like OPDS entries to the rest of Bookshelf.
     local header_book = {}
     for k, v in pairs(record) do header_book[k] = v end
-    local md = record.komga_dto and record.komga_dto.metadata
-    header_book.opds = { summary = md and md.summary }
+    header_book.opds = { summary = record.description }
 
     local last_row = {}
     local ok_desc, desc_args = pcall(widget._remoteDescriptionArgs, widget, header_book)
@@ -1664,6 +1672,7 @@ function KomgaBookshelf.install(ui)
                     payload = {
                         series_id = folder.komga_series_id,
                         series_title = folder.komga_series_title,
+                        series_summary = folder.komga_series_summary,
                     },
                 }
             else
