@@ -957,8 +957,8 @@ function KomgaSync:cleanupOlderChapters(current, keep)
     end
     table.sort(earlier, function(a, b) return a.n > b.n end)
 
+    -- Silent: this runs while the next chapter is being read.
     local lfs = require("libs/libkoreader-lfs")
-    local removed = 0
     -- earlier[1 .. keep-1] stay; everything from earlier[keep] on may go.
     for i = keep, #earlier do
         local book = earlier[i].book
@@ -966,15 +966,8 @@ function KomgaSync:cleanupOlderChapters(current, keep)
         local ok, path = pcall(self.getBookLocalPath, self, book, series_title)
         if ok and path and lfs.attributes(path, "mode") == "file"
                 and self:isChapterFinished(book, path) and deleteBookFile(path) then
-            removed = removed + 1
             logger.info("KomgaSync: Removed finished chapter:", path)
         end
-    end
-
-    if removed > 0 then
-        local T = self.plugin.i18n.T
-        local _ = self.plugin.i18n._
-        self.plugin:notify(T(_("Removed finished chapters: %1"), removed), "info")
     end
 end
 
