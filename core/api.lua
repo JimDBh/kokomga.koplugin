@@ -304,6 +304,30 @@ function KomgaAPI:get_series_for_collection(collection_id, page, size)
     return self:request("/api/v1/collections/" .. escape_uri(collection_id) .. "/series" .. q)
 end
 
+-- Series matching opts (GET /api/v1/series). read_status and status may be a
+-- single value or a list; library_id, sort, page and size as Komga takes them.
+function KomgaAPI:query_series(opts)
+    opts = opts or {}
+    local params = {}
+    local function add(name, value)
+        if type(value) == "table" then
+            for _, v in ipairs(value) do
+                table.insert(params, name .. "=" .. escape_uri(tostring(v)))
+            end
+        elseif value ~= nil then
+            table.insert(params, name .. "=" .. escape_uri(tostring(value)))
+        end
+    end
+    add("read_status", opts.read_status)
+    add("status", opts.status)
+    add("library_id", opts.library_id)
+    add("sort", opts.sort)
+    add("page", opts.page)
+    add("size", opts.size)
+    local q = #params > 0 and ("?" .. table.concat(params, "&")) or ""
+    return self:request("/api/v1/series" .. q)
+end
+
 function KomgaAPI:get_book(book_id)
     return self:request("/api/v1/books/" .. escape_uri(book_id))
 end

@@ -39,7 +39,6 @@ local PATH_PREFIX = "KOMGA://"
 local LIST_LIMIT = 50            -- items on a "recent" shelf's own list
 local ONE_SHOTS_LIMIT = 1000     -- one-shots are listed by title, so keep far more
 local COLLECTIONS_LIMIT = 200    -- collections on the Collections shelf
-local RECENT_READ_SCAN = 200     -- books scanned to find the recently read series
 local SERIES_BOOKS_LIMIT = 1000  -- books fetched when drilling into a series
 local COLLECTION_SERIES_LIMIT = 500 -- series fetched when drilling into a collection
 local WANT_ALL_LIMIT = 100000    -- Bookshelf's select-all fetch wants everything
@@ -253,6 +252,12 @@ local function trimSeries(series)
         id = asString(series.id),
         title = asString(md.title) or asString(series.name),
         lastModified = asString(series.lastModified),
+        -- Komga's own tallies, for the unread badge, the read state and the
+        -- read-status filter.
+        booksCount = asNumber(series.booksCount),
+        booksReadCount = asNumber(series.booksReadCount),
+        booksUnreadCount = asNumber(series.booksUnreadCount),
+        booksInProgressCount = asNumber(series.booksInProgressCount),
     }
 end
 
@@ -350,24 +355,18 @@ local function fetchList(plugin, mode)
             if item and item.id then items[#items + 1] = item end
         end
     else
-        -- Komga has no "recently read series" query, so walk the most recently
-        -- read books and keep each series the first time it appears.
-        local content = contentOf(api:get_books({
+        -- Series you have started, most recently read first: Komga sorts
+        -- series by their last read date, and the answer carries each series'
+        -- read counts.
+        local content = contentOf(api:query_series{
             read_status = { "IN_PROGRESS", "READ" },
-            sort = "readProgress.readDate,desc",
-        }, 0, RECENT_READ_SCAN))
+            sort = "readDate,desc",
+            page = 0, size = LIST_LIMIT,
+        })
         if not content then return nil end
-        local seen = {}
-        for _, book in ipairs(content) do
-            local series_id = asTable(book) and asString(book.seriesId)
-            if series_id and not seen[series_id] then
-                seen[series_id] = true
-                items[#items + 1] = {
-                    id = series_id,
-                    title = asString(book.seriesTitle) or asString(book.name),
-                }
-                if #items >= LIST_LIMIT then break end
-            end
+        for _, series in ipairs(content) do
+            local item = asTable(series) and trimSeries(series)
+            if item and item.id then items[#items + 1] = item end
         end
     end
 
@@ -552,25 +551,41 @@ end
 -- A series, as a folder card. Bookshelf draws the card's cover from first_book,
 -- and SpineWidget renders any record carrying cover_image_path whatever its
 -- filepath, so the series thumbnail stands in for a book.
+-- A series' read state from Komga's tallies: "finished" once every book is
+-- read, "reading" once any book is read or started, "unread" otherwise.
+local function seriesStatus(dto)
+    local total = dto.booksCount
+    local read = dto.booksReadCount or 0
+    if total and total > 0 and read >= total then return "finished" end
+    if read > 0 or (dto.booksInProgressCount or 0) > 0 then return "reading" end
+    return "unread"
+end
+
 local function seriesItem(dto)
     local path = PATH_PREFIX .. "series/" .. dto.id
     local title = dto.title or "?"
     local cover = existingCover("series", dto.id)
+    local status = seriesStatus(dto)
     return {
         kind = "folder",
         path = path,
         label = title,
         komga_series_id = dto.id,
         komga_series_title = title,
+        -- For the unread badge (see the FolderStack hook).
+        komga_total = dto.booksCount,
+        komga_unread = dto.booksUnreadCount,
         first_book = cover and {
             filepath = path,
             title = title,
             display_title = title,
             cover_image_path = cover,
             has_cover = true,
-            status = "unread",
-            read_status = "unread",
+            status = status,
+            read_status = status,
             is_komga = true,
+            -- Lets the SpineWidget hook show a finished series as finished.
+            komga_series_read = (status == "finished") or nil,
         } or nil,
     }
 end
@@ -1072,6 +1087,58 @@ local function installSourcePicker()
 end
 
 -- ---------------------------------------------------------------------------
+-- Series read state on the shelf
+-- ---------------------------------------------------------------------------
+
+-- A folder card's badge and cover are drawn by FolderStack, from counts the
+-- shelf row computes by walking the folder on disk -- which a Komga series
+-- card does not have. Supply Komga's instead, as the widgets are built.
+local function installReadStateHooks()
+    -- The badge. Bookshelf passes book_count only when its folder count badge
+    -- is switched on, so the badge follows that setting; when it is on, a
+    -- Komga series shows "unread / total" (CountBadge draws finished_count /
+    -- finished_total as "F/N").
+    local ok_stack, FolderStack = pcall(require, "lib/bookshelf_folder_stack")
+    if ok_stack and type(FolderStack) == "table" and type(FolderStack.new) == "function" then
+        local stack_new = FolderStack.new
+        rawset(FolderStack, "new", function(cls, args, ...)
+            if cls == FolderStack and type(args) == "table" and args.book_count ~= nil then
+                local folder = args.folder
+                if type(folder) == "table" and folder.komga_series_id
+                        and type(folder.komga_total) == "number" and folder.komga_total > 0
+                        and type(folder.komga_unread) == "number" then
+                    args.book_count = folder.komga_total
+                    args.selected_count = nil
+                    args.finished_count = folder.komga_unread
+                    args.finished_total = folder.komga_total
+                end
+            end
+            return stack_new(cls, args, ...)
+        end)
+    else
+        logger.info("KomgaBookshelf: Bookshelf's FolderStack not found; no unread badges on series")
+    end
+
+    -- The read state. FolderStack draws its cover without status indicators,
+    -- so a folder never shows as finished. Turn them on for the cover of a
+    -- fully read Komga series: it then gets Bookshelf's finished mark, and
+    -- fades when "Fade finished books" is on -- exactly as a finished book.
+    local ok_spine, SpineWidget = pcall(require, "lib/bookshelf_spine_widget")
+    if ok_spine and type(SpineWidget) == "table" and type(SpineWidget.new) == "function" then
+        local spine_new = SpineWidget.new
+        rawset(SpineWidget, "new", function(cls, args, ...)
+            if cls == SpineWidget and type(args) == "table" and type(args.book) == "table"
+                    and args.book.komga_series_read then
+                args.show_status = true
+            end
+            return spine_new(cls, args, ...)
+        end)
+    else
+        logger.info("KomgaBookshelf: Bookshelf's SpineWidget not found; read series won't show as finished")
+    end
+end
+
+-- ---------------------------------------------------------------------------
 -- Install
 -- ---------------------------------------------------------------------------
 
@@ -1322,6 +1389,11 @@ function KomgaBookshelf.install(ui)
     end
 
     logger.info("KomgaBookshelf: Bookshelf integration installed")
+
+    local ok_state, err_state = pcall(installReadStateHooks)
+    if not ok_state then
+        logger.warn("KomgaBookshelf: read-state hooks failed:", tostring(err_state))
+    end
 
     -- Separate from the data side: without it, shelves can still be added from
     -- kokomga's menu.
