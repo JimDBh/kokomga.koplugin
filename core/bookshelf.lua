@@ -138,9 +138,36 @@ local LIST_LABELS = {
     collections = "Collections",
 }
 
+local function gettext(plugin)
+    return plugin and plugin.i18n and plugin.i18n._ or function(s) return s end
+end
+
+local function template(plugin)
+    return plugin and plugin.i18n and plugin.i18n.T or function(s, a) return (s:gsub("%%1", tostring(a))) end
+end
+
 function KomgaBookshelf.listLabel(plugin, mode)
-    local _ = plugin and plugin.i18n and plugin.i18n._ or function(s) return s end
+    local _ = gettext(plugin)
     return _(LIST_LABELS[mode] or LIST_LABELS[DEFAULT_MODE])
+end
+
+-- A shelf's read-status filter, in Komga's terms; nil shows everything.
+local READ_FILTERS = { "UNREAD", "IN_PROGRESS", "READ" }
+
+local function readFilter(source)
+    local value = type(source) == "table" and source.read_status
+    for _, known in ipairs(READ_FILTERS) do
+        if value == known then return value end
+    end
+end
+
+-- The browser's own labels for the same three states.
+local function readFilterLabel(plugin, value)
+    local _ = gettext(plugin)
+    if value == "UNREAD" then return _("Unread") end
+    if value == "IN_PROGRESS" then return _("In Progress") end
+    if value == "READ" then return _("Completed") end
+    return _("All")
 end
 
 -- ---------------------------------------------------------------------------
@@ -496,25 +523,24 @@ local function localPathIfDownloaded(plugin, dto)
     if ok and fileExists(path) then return path end
 end
 
+-- A book's read state from its Komga progress, and how far through it is.
+local function bookStatus(dto)
+    local progress = dto.readProgress
+    if not progress then return "unread", 0 end
+    if progress.completed then return "finished", 1 end
+    local pages = dto.media and dto.media.pagesCount
+    if pages and pages > 0 and progress.page then
+        return "reading", math.min(progress.page / pages, 0.99)
+    end
+    return "reading", 0
+end
+
 -- A book, shaped like the records Bookshelf's own Kobo source produces.
 local function bookRecord(plugin, dto)
     local md = dto.metadata or {}
     local title = md.title or dto.name or "?"
     local local_path = localPathIfDownloaded(plugin, dto)
-
-    local status, pct = "unread", 0
-    local progress = dto.readProgress
-    if progress then
-        local pages = dto.media and dto.media.pagesCount
-        if progress.completed then
-            status, pct = "finished", 1
-        else
-            status = "reading"
-            if pages and pages > 0 and progress.page then
-                pct = math.min(progress.page / pages, 0.99)
-            end
-        end
-    end
+    local status, pct = bookStatus(dto)
 
     local authors = dto.authors or {}
     local cover = existingCover("book", dto.id)
@@ -614,27 +640,44 @@ local function collectionItem(dto)
     }
 end
 
+-- Whether an item passes a read-status filter. A series is judged by Komga's
+-- tallies; one cached before those were kept has none, and is shown rather
+-- than wrongly hidden. Collections are never filtered.
+local FILTER_STATUS = { UNREAD = "unread", IN_PROGRESS = "reading", READ = "finished" }
+
+local function passesReadFilter(item_type, dto, filter)
+    if not filter then return true end
+    local want = FILTER_STATUS[filter]
+    if item_type == "book" then
+        return (bookStatus(dto)) == want
+    elseif item_type == "series" then
+        if dto.booksCount == nil then return true end
+        return seriesStatus(dto) == want
+    end
+    return true
+end
+
 -- ---------------------------------------------------------------------------
 -- Shelf contents
 -- ---------------------------------------------------------------------------
 
-local function listSpec(mode)
+local function listSpec(mode, filter)
     return {
-        section = "lists", key = mode, item_type = listItemType(mode),
+        section = "lists", key = mode, item_type = listItemType(mode), filter = filter,
         fetch = function(plugin) return fetchList(plugin, mode) end,
     }
 end
 
-local function seriesSpec(series_id)
+local function seriesSpec(series_id, filter)
     return {
-        section = "series", key = series_id, item_type = "book",
+        section = "series", key = series_id, item_type = "book", filter = filter,
         fetch = function(plugin) return fetchSeriesBooks(plugin, series_id) end,
     }
 end
 
-local function collectionSpec(collection_id)
+local function collectionSpec(collection_id, filter)
     return {
-        section = "collections", key = collection_id, item_type = "series",
+        section = "collections", key = collection_id, item_type = "series", filter = filter,
         fetch = function(plugin) return fetchCollectionSeries(plugin, collection_id) end,
     }
 end
@@ -650,6 +693,14 @@ local function buildView(plugin, spec, offset, limit, allow_network, want_all)
     end
 
     local all = entry and entry.items or {}
+    -- Filter the whole list before paging, so pages and the total agree.
+    if spec.filter then
+        local kept = {}
+        for _, dto in ipairs(all) do
+            if passesReadFilter(spec.item_type, dto, spec.filter) then kept[#kept + 1] = dto end
+        end
+        all = kept
+    end
     local page, missing = {}, {}
     for i = offset + 1, math.min(offset + limit, #all) do
         local dto = all[i]
@@ -678,22 +729,26 @@ end
 -- a series or collection drilled into from one. nil for anything else,
 -- including a search run from a Komga shelf.
 local function viewSpec(widget, TabModel)
+    local tab = TabModel.getById(widget.chip)
+    local source = tab and tab.source
+    local is_komga_shelf = type(source) == "table" and source.kind == SOURCE_KIND
+    -- A drill-down inherits its shelf's filter, as Bookshelf's folders do.
+    local filter = is_komga_shelf and readFilter(source) or nil
+
     local path = widget._drilldown_path
     local tip = path and path[#path]
     if tip then
         local payload = type(tip.payload) == "table" and tip.payload or {}
         if tip.kind == SERIES_DRILL and payload.series_id then
-            return seriesSpec(payload.series_id)
+            return seriesSpec(payload.series_id, filter)
         end
         if tip.kind == COLLECTION_DRILL and payload.collection_id then
-            return collectionSpec(payload.collection_id)
+            return collectionSpec(payload.collection_id, filter)
         end
         return nil
     end
-    local tab = TabModel.getById(widget.chip)
-    local source = tab and tab.source
-    if type(source) == "table" and source.kind == SOURCE_KIND then
-        return listSpec(listMode(source))
+    if is_komga_shelf then
+        return listSpec(listMode(source), filter)
     end
 end
 
@@ -847,18 +902,20 @@ local function registerSourceLabel(resolve)
     end
 end
 
-local function pickList(plugin, current, on_pick, on_cancel)
-    local _ = plugin and plugin.i18n and plugin.i18n._ or function(s) return s end
+-- A single-choice picker. options are { value = …, label = … }; the current
+-- value is ticked.
+local function pickOption(plugin, title, options, current, on_pick, on_cancel)
+    local _ = gettext(plugin)
     local ButtonDialog = require("ui/widget/buttondialog")
     local dialog
     local rows = {}
-    for _i, mode in ipairs(KomgaBookshelf.LIST_MODES) do
-        local prefix = (mode == current) and "\xE2\x9C\x93 " or "  "
+    for _i, option in ipairs(options) do
+        local prefix = (option.value == current) and "\xE2\x9C\x93 " or "  "
         rows[#rows + 1] = { {
-            text = prefix .. KomgaBookshelf.listLabel(plugin, mode),
+            text = prefix .. option.label,
             callback = function()
                 UIManager:close(dialog)
-                on_pick(mode)
+                on_pick(option.value)
             end,
         } }
     end
@@ -869,8 +926,25 @@ local function pickList(plugin, current, on_pick, on_cancel)
             if on_cancel then on_cancel() end
         end,
     } }
-    dialog = ButtonDialog:new{ title = "Komga", buttons = rows }
+    dialog = ButtonDialog:new{ title = title, buttons = rows }
     UIManager:show(dialog)
+end
+
+local function pickList(plugin, current, on_pick, on_cancel)
+    local options = {}
+    for _i, mode in ipairs(KomgaBookshelf.LIST_MODES) do
+        options[#options + 1] = { value = mode, label = KomgaBookshelf.listLabel(plugin, mode) }
+    end
+    pickOption(plugin, "Komga", options, current, on_pick, on_cancel)
+end
+
+-- "All" is stored as no filter; false stands in for it here so it can be ticked.
+local function pickReadFilter(plugin, current, on_pick)
+    local options = { { value = false, label = readFilterLabel(plugin, nil) } }
+    for _i, value in ipairs(READ_FILTERS) do
+        options[#options + 1] = { value = value, label = readFilterLabel(plugin, value) }
+    end
+    pickOption(plugin, nil, options, current or false, function(value) on_pick(value or nil) end)
 end
 
 -- A "Komga…" row for the "Shelf source" dialog, in the style of Bookshelf's
@@ -906,11 +980,12 @@ local function upvaluesOf(fn)
     return out
 end
 
--- A Komga shelf has no sort or filter -- it keeps Komga's order and shows the
--- whole list -- and is always a cover grid. Bookshelf's editor hides its sort
--- and filter rows for OPDS shelves, but the check is hardcoded to that source,
--- so reshape the editor's rows as its dialog is built: drop Filters and Shelf
--- style, and turn the first sort button into the choice of Komga list.
+-- A Komga shelf has none of Bookshelf's own sort or filter -- Komga does that
+-- -- and is always a cover grid. Bookshelf's editor hides its sort and filter
+-- rows for OPDS shelves, but the check is hardcoded to that source, so reshape
+-- the editor's rows as its dialog is built: drop Shelf style, turn the first
+-- sort button into the choice of Komga list, and the Filters button into the
+-- read-status filter.
 --
 -- The buttons are told apart by what their label functions close over, which
 -- holds in every language: the sort buttons call _sortButtonText, Filters
@@ -920,9 +995,9 @@ end
 local function reshapeEditorRows(rows)
     local draft
     local role = {}
-    for _, row in ipairs(rows) do
+    for _i, row in ipairs(rows) do
         if type(row) == "table" then
-            for _, button in ipairs(row) do
+            for _j, button in ipairs(row) do
                 if type(button) == "table" and type(button.text_func) == "function" then
                     local up = upvaluesOf(button.text_func)
                     if type(up.draft) == "table" then draft = draft or up.draft end
@@ -942,16 +1017,18 @@ local function reshapeEditorRows(rows)
     end
 
     local plugin = liveModule("kokomga")
+    local _ = gettext(plugin)
+    local T = template(plugin)
     local list_button_kept = false
-    for _, row in ipairs(rows) do
+    for _i, row in ipairs(rows) do
         if type(row) == "table" then
             local kept = {}
-            for _, button in ipairs(row) do
+            for _j, button in ipairs(row) do
                 local r = role[button]
+                -- The callbacks stay Bookshelf's own: each calls an Editor
+                -- method (_pickSortLevel, _openFilters) and then marks the edit
+                -- for saving, and those methods are where our pickers take over.
                 if r == "sort" then
-                    -- Its callback stays Bookshelf's own, which calls
-                    -- _pickSortLevel and then marks the edit for saving;
-                    -- _pickSortLevel is where the list picker takes over.
                     if not list_button_kept then
                         list_button_kept = true
                         button.text_func = function()
@@ -959,7 +1036,12 @@ local function reshapeEditorRows(rows)
                         end
                         kept[#kept + 1] = button
                     end
-                elseif r ~= "filters" and r ~= "style" then
+                elseif r == "filters" then
+                    button.text_func = function()
+                        return T(_("Show: %1"), readFilterLabel(plugin, readFilter(draft.source)))
+                    end
+                    kept[#kept + 1] = button
+                elseif r ~= "style" then
                     kept[#kept + 1] = button
                 end
             end
@@ -1073,15 +1155,28 @@ local function installSourcePicker()
         end
     end
 
-    -- Unreachable once the rows are reshaped; kept inert in case a Bookshelf
-    -- change leaves them on screen.
-    for _, name in ipairs({ "_openFilters", "_pickGroupDisplay" }) do
-        if type(Editor[name]) == "function" then
-            local orig = Editor[name]
-            Editor[name] = function(editor, draft, ...)
-                if isKomgaDraft(draft) then return end
-                return orig(editor, draft, ...)
+    -- The Filters button now picks the read-status filter.
+    if type(Editor._openFilters) == "function" then
+        local orig_openFilters = Editor._openFilters
+        Editor._openFilters = function(editor, draft, on_close, ...)
+            if isKomgaDraft(draft) then
+                pickReadFilter(liveModule("kokomga"), readFilter(draft.source), function(value)
+                    draft.source.read_status = value
+                    if type(on_close) == "function" then on_close() end
+                end)
+                return
             end
+            return orig_openFilters(editor, draft, on_close, ...)
+        end
+    end
+
+    -- Unreachable once the rows are reshaped; kept inert in case a Bookshelf
+    -- change leaves it on screen.
+    if type(Editor._pickGroupDisplay) == "function" then
+        local orig_pickGroupDisplay = Editor._pickGroupDisplay
+        Editor._pickGroupDisplay = function(editor, draft, ...)
+            if isKomgaDraft(draft) then return end
+            return orig_pickGroupDisplay(editor, draft, ...)
         end
     end
 end
@@ -1196,7 +1291,7 @@ function KomgaBookshelf.install(ui)
             local plugin = livePlugin()
             if not plugin then return {}, 0 end
             local ok, items, total = xpcall(function()
-                return buildView(plugin, listSpec(listMode(source)),
+                return buildView(plugin, listSpec(listMode(source), readFilter(source)),
                     offset or 0, limit or WANT_ALL_LIMIT, false, false)
             end, debug.traceback)
             if ok then return items, total end
