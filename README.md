@@ -5,10 +5,11 @@ A KOReader plugin that connects to your Komga server. It provides a native libra
 ## Highlights
 
 * **Catalog Browsing**: Explore your entire Komga server—including libraries, collections, one-shots, recently added, and on-deck books—with cover thumbnails, list or grid views, and read status filters.
-* **Bookshelf Integration**: Add Komga shelves—Keep Reading, On Deck, recent series and books, one-shots, and collections—to the [Bookshelf](https://github.com/AndyHazz/bookshelf.koplugin) home screen and download books straight from them.
+* **Bookshelf Integration**: Add Komga shelves—All Series with Komga's sorting and filters, Keep Reading, On Deck, recent series and books, one-shots, and collections—to the [Bookshelf](https://github.com/AndyHazz/bookshelf.koplugin) home screen, with read-state badges, and download books straight from them.
 * **Bulk Downloads**: Easily queue multiple books or download all remaining unread books in a series directly from the browser view.
 * **Background Pre-Downloading**: Pre-download the next $N$ chapters sequentially in the background while reading. 
-* **Smart Next-Chapter Transition**: When you turn the last page, the plugin can instantly open the next book if it's already on your device, or download it over Wi-Fi and open it automatically. 
+* **Smart Next-Chapter Transition**: When you turn the last page, the plugin can instantly open the next book if it's already on your device—even offline—or download it over Wi-Fi and open it automatically.
+* **Automatic Chapter Cleanup**: Optionally keep only the last N chapters of a series on your device, removing finished ones as you move on.
 * **Automatic Book & Folder Metadata**: Downloads automatically fetch rich metadata (authors, summaries, and series indexes) and save folder cover art for file browser plugins.
 * **Progress Syncing**: Keep your reading progress in sync directly with your Komga server, without needing to configure it as a KOSync server.
 * **Auto RTL for Manga**: Automatically sets your reading layout to Right-to-Left (RTL) when opening manga matched with your Komga server.

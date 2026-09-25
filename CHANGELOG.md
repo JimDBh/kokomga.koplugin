@@ -4,14 +4,18 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-25
+
 ### Added
 - **Bookshelf Integration**:
   - Komga is now a shelf source in the [Bookshelf](https://github.com/AndyHazz/bookshelf.koplugin) home screen plugin, showing All Series (default), Keep Reading, On Deck, Recently Read Series, Recently Added Series, Recently Added Books, One-Shots, or Collections. Add one from Bookshelf's shelf editor (**Source → Komga…**) or from **Options → Add Komga Shelf to Bookshelf**.
-  - All Series pages from Komga as you browse, with Komga's sorting (title, recently added / updated / read, release date, book count) and filters (read status, library, publication status). Every other list can be filtered by read status.
-  - Series and collections open as folders inside Bookshelf. Series show an unread / total badge when Bookshelf's folder badge is on, and fully read series are marked finished. Books show their Komga cover, summary, read state, and a tick once downloaded; tapping one that isn't downloaded offers to download it through kokomga, so progress sync and the next-chapter flow keep working.
+  - All Series pages from Komga as you browse, with Komga's sorting (title, recently added / updated / read, release date, book count) and filters (read status, library, publication status). Every other list can be filtered by read status. Each filter takes any combination of values.
+  - Series and collections open as folders inside Bookshelf. Series show an unread / total badge when Bookshelf's folder badge is on, and fully read series are marked finished. Books show their Komga cover, summary (or their series' summary when a chapter has none), read state, and a tick once downloaded; tapping one that isn't downloaded offers to download it through kokomga, so progress sync and the next-chapter flow keep working.
   - Only book details and covers are fetched; pull down on a Komga shelf to refresh it from the server. Komga shelves display as covers.
 - **Remove Finished Chapters**:
-  - New option to keep only the last N chapters of a series (off by default). Moving to the next chapter deletes older chapters of that series that are marked finished; their reading position, highlights, and notes are kept.
+  - New option to keep only the last N chapters of a series (off by default). Moving to the next chapter quietly deletes older chapters of that series that are marked finished; their reading position, highlights, and notes are kept.
+- **Localization (i18n)**:
+  - Added Simplified Chinese, Traditional Chinese, Japanese, and Spanish translations for all new Bookshelf and chapter options.
 
 ### Changed
 - **Offline Next-Chapter Transitions**:
