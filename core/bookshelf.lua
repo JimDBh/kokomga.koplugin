@@ -155,23 +155,39 @@ function KomgaBookshelf.listLabel(plugin, mode)
     return _(LIST_LABELS[mode] or LIST_LABELS[DEFAULT_MODE])
 end
 
--- A shelf's read-status filter, in Komga's terms; nil shows everything.
+-- The read states a shelf can be filtered to, in Komga's terms.
 local READ_FILTERS = { "UNREAD", "IN_PROGRESS", "READ" }
 
+-- A shelf's read-status filter: the chosen states, in a fixed order, or nil
+-- to show everything -- which is what choosing none, or all three, means. A
+-- shelf saved before several could be chosen holds one state as a string.
 local function readFilter(source)
     local value = type(source) == "table" and source.read_status
-    for _, known in ipairs(READ_FILTERS) do
-        if value == known then return value end
+    if type(value) == "string" then value = { value } end
+    if type(value) ~= "table" then return nil end
+    local chosen = {}
+    for _i, state in ipairs(value) do chosen[state] = true end
+    local out = {}
+    for _i, state in ipairs(READ_FILTERS) do
+        if chosen[state] then out[#out + 1] = state end
     end
+    if #out == 0 or #out == #READ_FILTERS then return nil end
+    return out
 end
 
--- The browser's own labels for the same three states.
-local function readFilterLabel(plugin, value)
+-- The browser's own labels for the three states.
+local function readStateLabel(plugin, state)
     local _ = gettext(plugin)
-    if value == "UNREAD" then return _("Unread") end
-    if value == "IN_PROGRESS" then return _("In Progress") end
-    if value == "READ" then return _("Completed") end
-    return _("All")
+    if state == "UNREAD" then return _("Unread") end
+    if state == "IN_PROGRESS" then return _("In Progress") end
+    return _("Completed")
+end
+
+local function readFilterLabel(plugin, filter)
+    if not filter then return gettext(plugin)("All") end
+    local labels = {}
+    for _i, state in ipairs(filter) do labels[#labels + 1] = readStateLabel(plugin, state) end
+    return table.concat(labels, ", ")
 end
 
 -- All Series is sorted and filtered by Komga. These are the sort keys Komga's
@@ -717,14 +733,19 @@ local FILTER_STATUS = { UNREAD = "unread", IN_PROGRESS = "reading", READ = "fini
 
 local function passesReadFilter(item_type, dto, filter)
     if not filter then return true end
-    local want = FILTER_STATUS[filter]
+    local status
     if item_type == "book" then
-        return (bookStatus(dto)) == want
+        status = (bookStatus(dto))
     elseif item_type == "series" then
         if dto.booksCount == nil then return true end
-        return seriesStatus(dto) == want
+        status = seriesStatus(dto)
+    else
+        return true
     end
-    return true
+    for _i, state in ipairs(filter) do
+        if FILTER_STATUS[state] == status then return true end
+    end
+    return false
 end
 
 -- ---------------------------------------------------------------------------
@@ -765,7 +786,12 @@ local function allSeriesSpec(source)
     }
     return {
         paged = true, section = "pages", item_type = "series",
-        key = table.concat({ query.sort, query.read_status or "", query.library_id or "", query.status or "" }, "|"),
+        key = table.concat({
+            query.sort,
+            query.read_status and table.concat(query.read_status, ",") or "",
+            query.library_id or "",
+            query.status or "",
+        }, "|"),
         fetch_page = function(plugin, page)
             local response = plugin.api:query_series{
                 sort = query.sort, read_status = query.read_status,
@@ -1130,13 +1156,50 @@ local function pickList(plugin, current, on_pick, on_cancel)
     pickOption(plugin, "Komga", options, current, on_pick, on_cancel)
 end
 
--- "All" is stored as no filter; false stands in for it here so it can be ticked.
+-- Read states, several at once: tap to tick or untick, then Apply. The dialog
+-- is shown afresh after each tap so its ticks are current. Ticking none, or
+-- all three, means no filter.
 local function pickReadFilter(plugin, current, on_pick)
-    local options = { { value = false, label = readFilterLabel(plugin, nil) } }
-    for _i, value in ipairs(READ_FILTERS) do
-        options[#options + 1] = { value = value, label = readFilterLabel(plugin, value) }
+    local _ = gettext(plugin)
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local chosen = {}
+    for _i, state in ipairs(current or {}) do chosen[state] = true end
+
+    local dialog
+    local function show()
+        local rows = {}
+        for _i, state in ipairs(READ_FILTERS) do
+            rows[#rows + 1] = { {
+                text = (chosen[state] and "\xE2\x9C\x93 " or "  ") .. readStateLabel(plugin, state),
+                callback = function()
+                    chosen[state] = not chosen[state] or nil
+                    UIManager:close(dialog)
+                    show()
+                end,
+            } }
+        end
+        rows[#rows + 1] = {
+            {
+                text = _("Cancel"),
+                callback = function() UIManager:close(dialog) end,
+            },
+            {
+                text = _("Apply"),
+                is_enter_default = true,
+                callback = function()
+                    UIManager:close(dialog)
+                    local list = {}
+                    for _i, state in ipairs(READ_FILTERS) do
+                        if chosen[state] then list[#list + 1] = state end
+                    end
+                    on_pick(readFilter({ read_status = list }))
+                end,
+            },
+        }
+        dialog = ButtonDialog:new{ buttons = rows }
+        UIManager:show(dialog)
     end
-    pickOption(plugin, nil, options, current or false, function(value) on_pick(value or nil) end)
+    show()
 end
 
 local function translated(plugin, options)
