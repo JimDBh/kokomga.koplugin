@@ -6,9 +6,16 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ### Added
 - **Bookshelf Integration**:
-  - Komga is now a shelf source in the [Bookshelf](https://github.com/AndyHazz/bookshelf.koplugin) home screen plugin, showing Keep Reading, On Deck, Recently Read Series, Recently Added Series, Recently Added Books, One-Shots, or Collections. Add one from Bookshelf's shelf editor (**Source → Komga…**) or from **Options → Add Komga Shelf to Bookshelf**.
-  - Series and collections open as folders inside Bookshelf. Books show their Komga cover and a tick once downloaded; tapping one that isn't downloaded offers to download it through kokomga, so progress sync and the next-chapter flow keep working.
-  - Only book details and covers are fetched; pull down on a Komga shelf to refresh it from the server. Komga shelves keep Komga's order, display as covers, and have no sort or filter options.
+  - Komga is now a shelf source in the [Bookshelf](https://github.com/AndyHazz/bookshelf.koplugin) home screen plugin, showing All Series (default), Keep Reading, On Deck, Recently Read Series, Recently Added Series, Recently Added Books, One-Shots, or Collections. Add one from Bookshelf's shelf editor (**Source → Komga…**) or from **Options → Add Komga Shelf to Bookshelf**.
+  - All Series pages from Komga as you browse, with Komga's sorting (title, recently added / updated / read, release date, book count) and filters (read status, library, publication status). Every other list can be filtered by read status.
+  - Series and collections open as folders inside Bookshelf. Series show an unread / total badge when Bookshelf's folder badge is on, and fully read series are marked finished. Books show their Komga cover, summary, read state, and a tick once downloaded; tapping one that isn't downloaded offers to download it through kokomga, so progress sync and the next-chapter flow keep working.
+  - Only book details and covers are fetched; pull down on a Komga shelf to refresh it from the server. Komga shelves display as covers.
+- **Remove Finished Chapters**:
+  - New option to keep only the last N chapters of a series (off by default). Moving to the next chapter deletes older chapters of that series that are marked finished; their reading position, highlights, and notes are kept.
+
+### Changed
+- **Offline Next-Chapter Transitions**:
+  - kokomga now remembers each book's next book, so a downloaded next chapter opens at the end of a book even without a connection, and faster when online.
 
 ## [2.2.0] - 2026-09-20
 ### Added
