@@ -137,9 +137,12 @@ function KomgaPlugin:init()
     self.ui.menu:registerToMainMenu(self)
     self:registerEvents()
 
-    -- Wait a tick so the Bookshelf plugin, if installed, has initialised too.
+    -- Komga as a Bookshelf shelf source. Plugins load in name order, so try
+    -- again a tick later in case Bookshelf is not there yet.
     local ui = self.ui
-    UIManager:nextTick(function() KomgaBookshelf.install(ui) end)
+    if not KomgaBookshelf.register(ui) then
+        UIManager:nextTick(function() KomgaBookshelf.register(ui) end)
+    end
     logger.info("KomgaPlugin: Initialized successfully")
 end
 
