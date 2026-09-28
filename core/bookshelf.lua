@@ -51,7 +51,11 @@ KomgaBookshelf.LIST_MODES = {
 local DEFAULT_MODE = "all_series"
 
 local registered = false
+local registered_plugin = nil -- the kokomga instance that registered last
+local registered_bookshelf = nil -- the Bookshelf instance it registered with
+local missed_while_unready = false -- Bookshelf asked for Komga before kokomga was ready
 local last_offset = {}        -- spec key -> offset last shown, for pull-down refresh
+local last_limit = nil        -- how many items the last shelf page asked for
 local pending_refresh = {}    -- "section|key" -> true while a refresh is queued
 local last_failure = {}       -- "section|key" -> os.time() of the last failed refresh
 local cover_attempted = {}    -- "type_id" -> true; a cover is tried once per session
@@ -72,12 +76,17 @@ local function liveModule(name)
     end
 end
 
--- The kokomga instance, only when it can talk to a Komga server.
+local function usable(plugin)
+    return plugin and plugin.settings and plugin.api and plugin.sync and plugin.cache and plugin
+end
+
+-- The kokomga instance, only when it can talk to a Komga server. Returning
+-- from a book, the new file manager is not KOReader's instance yet while its
+-- plugins start, and the reader is already gone: Bookshelf can draw the shelf
+-- in that gap, so fall back to the instance that registered last rather than
+-- report Komga as unavailable and leave the shelf empty.
 local function livePlugin()
-    local plugin = liveModule("kokomga")
-    if plugin and plugin.settings and plugin.api and plugin.sync and plugin.cache then
-        return plugin
-    end
+    return usable(liveModule("kokomga")) or usable(registered_plugin) or nil
 end
 
 local function isOnline()
@@ -96,9 +105,10 @@ local function isKomgaPath(path)
 end
 
 -- Tells Bookshelf that Komga has more to show; it redraws the shelf if a Komga
--- shelf is on screen.
+-- shelf is on screen. Any Bookshelf instance will do: the source registry, and
+-- the shelf listening to it, belong to the session.
 local function notifyChanged()
-    local bookshelf = liveModule("bookshelf")
+    local bookshelf = liveModule("bookshelf") or registered_bookshelf
     if bookshelf and type(bookshelf.sourceChanged) == "function" then
         local ok, err = pcall(bookshelf.sourceChanged, bookshelf, SOURCE_KIND)
         if not ok then logger.warn("KomgaBookshelf: sourceChanged failed:", tostring(err)) end
@@ -1503,6 +1513,48 @@ local function editorRows(draft)
     return rows
 end
 
+-- Covers loaded with a folder's first page when no shelf page has been drawn
+-- yet to say how many fit on screen.
+local PRELOAD_COVERS = 18
+
+-- A series or collection opened for the first time has nothing cached: left to
+-- the background, the shelf would draw it empty, then without covers, then
+-- whole. Load its contents and its first page of covers now instead, behind one
+-- notice. A folder already cached opens at once, and is refreshed in the
+-- background when stale; offline, nothing is fetched.
+local function preloadFolder(spec)
+    if readEntry(spec.section, spec.key) or not isOnline() then return end
+    local plugin = livePlugin()
+    if not plugin then return end
+    local _ = plugin.i18n._
+    local InfoMessage = require("ui/widget/infomessage")
+    local notice = InfoMessage:new{ text = _("Loading from Komga…") }
+    UIManager:show(notice)
+    UIManager:forceRePaint()
+
+    local ok, result = pcall(spec.fetch, plugin)
+    local entry = ok and entryFromResult(result)
+    if entry then
+        writeEntry(spec.section, spec.key, entry)
+        local cover_type = spec.item_type
+        local wanted = math.min(#entry.items, last_limit or PRELOAD_COVERS)
+        for i = 1, wanted do
+            local dto = entry.items[i]
+            if not existingCover(cover_type, dto.id) then
+                cover_attempted[cover_type .. "_" .. tostring(dto.id)] = true
+                pcall(plugin.cache.cacheThumbnail, plugin.cache,
+                    cover_type, dto.id, dto.lastModified, true)
+            end
+        end
+    else
+        -- The drill then asks again in the background, after the usual pause.
+        last_failure[spec.section .. "|" .. tostring(spec.key)] = os.time()
+        logger.warn("KomgaBookshelf: loading", spec.section, tostring(spec.key), "failed:",
+            ok and "" or tostring(result))
+    end
+    UIManager:close(notice)
+end
+
 -- ---------------------------------------------------------------------------
 -- The source
 -- ---------------------------------------------------------------------------
@@ -1512,8 +1564,14 @@ end
 local SPEC = {
     api = 1,
     label = function() return "Komga" end,
-    -- Only while kokomga can talk to a Komga server.
-    available = function() return livePlugin() ~= nil end,
+    -- Only while kokomga can talk to a Komga server. Asked before any kokomga
+    -- instance is ready (Bookshelf starts first), it is noted, so the shelf is
+    -- redrawn once one registers.
+    available = function()
+        if livePlugin() then return true end
+        missed_while_unready = true
+        return false
+    end,
     remote_prefix = PATH_PREFIX,
 
     -- Picking Komga as a shelf's source asks which list it shows; its sort and
@@ -1538,26 +1596,38 @@ local SPEC = {
         offset = offset or 0
         -- Select-all asks for everything: serve what is cached, fetch nothing.
         local want_all = not limit or limit >= WANT_ALL_FROM
-        if not want_all then last_offset[spec.key] = offset end
+        if not want_all then
+            last_offset[spec.key] = offset
+            last_limit = limit
+        end
         return buildView(plugin, spec, offset, limit or WANT_ALL_LIMIT, not want_all, want_all)
     end,
 
+    -- Called on the tap, before Bookshelf drills in: a folder opened for the
+    -- first time is loaded here, so the drill draws it complete.
     open_folder = function(folder)
+        local entry, spec
         if folder.komga_series_id then
-            return {
+            entry = {
                 kind = SERIES_DRILL,
                 label = folder.komga_series_title or folder.title,
                 series_id = folder.komga_series_id,
                 series_summary = folder.komga_series_summary,
             }
-        end
-        if folder.komga_collection_id then
-            return {
+            spec = seriesSpec(folder.komga_series_id)
+        elseif folder.komga_collection_id then
+            entry = {
                 kind = COLLECTION_DRILL,
                 label = folder.komga_collection_title or folder.title,
                 collection_id = folder.komga_collection_id,
             }
+            spec = collectionSpec(folder.komga_collection_id)
         end
+        if spec then
+            local ok, err = pcall(preloadFolder, spec)
+            if not ok then logger.warn("KomgaBookshelf: loading a folder failed:", tostring(err)) end
+        end
+        return entry
     end,
 
     -- A book on the device opens straight away; one that is not offers its
@@ -1591,7 +1661,7 @@ local SPEC = {
 -- Registers Komga with Bookshelf, when Bookshelf has the shelf source API. Safe
 -- to call from every kokomga init: registering again replaces the spec. Returns
 -- whether Bookshelf took it.
-function KomgaBookshelf.register(ui)
+function KomgaBookshelf.register(ui, plugin)
     local bookshelf = ui and ui.bookshelf
     if not (bookshelf and type(bookshelf.registerSource) == "function"
             and (tonumber(bookshelf.SOURCE_API) or 0) >= 1) then
@@ -1604,6 +1674,15 @@ function KomgaBookshelf.register(ui)
     end
     if not registered then logger.info("KomgaBookshelf: Komga registered as a Bookshelf shelf source") end
     registered = true
+    registered_plugin = plugin or registered_plugin
+    registered_bookshelf = bookshelf
+    -- A Komga shelf drawn before any kokomga instance was ready came up empty:
+    -- have it asked again. Only then -- a redraw on every kokomga start would
+    -- repaint a shelf parked under the book being opened.
+    if missed_while_unready and livePlugin() then
+        missed_while_unready = false
+        notifyChanged()
+    end
     return true
 end
 
