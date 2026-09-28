@@ -769,13 +769,17 @@ end
 
 -- A series, as a folder: with its cover it draws in the shelf's folder style,
 -- and a tap drills in through the spec's open_folder. Its badge follows the
--- reader's folder badge settings; with the "finished of total" format it
--- shows unread / total, which is what matters when catching up on a series.
+-- reader's folder badge settings and reads like a local folder's: with the
+-- "finished of total" format, books read / books in the series.
 local function seriesItem(dto)
     local title = dto.title or "?"
     local status = seriesStatus(dto)
     local total = dto.booksCount
     local has_total = type(total) == "number" and total > 0
+    local finished = dto.booksReadCount
+    if type(finished) ~= "number" and has_total and type(dto.booksUnreadCount) == "number" then
+        finished = total - dto.booksUnreadCount
+    end
     return {
         is_folder = true,
         filepath = PATH_PREFIX .. "series/" .. dto.id,
@@ -783,7 +787,7 @@ local function seriesItem(dto)
         label = title,
         cover_image_path = existingCover("series", dto.id),
         book_count = has_total and total or nil,
-        finished_count = has_total and dto.booksUnreadCount or nil,
+        finished_count = has_total and finished or nil,
         finished_total = has_total and total or nil,
         status = status,
         read_status = status,
