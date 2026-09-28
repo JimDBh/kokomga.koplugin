@@ -566,8 +566,6 @@ function KomgaSync:pullProgress(ui, is_manual, ensure_networking)
     end
     
     local function do_pull()
-        if is_manual then self.plugin:notify(_("Checking server progress..."), "info") end
-        
         logger.info("KomgaSync: Executing pullProgress for book", book_id)
         
         local progress, p_err = self.plugin.api:get_read_progress(book_id)
@@ -752,8 +750,11 @@ function KomgaSync:isBookDownloaded(book)
     return lfs.attributes(local_path, "mode") == "file"
 end
 
--- Download book
-function KomgaSync:downloadBook(book, series_title, on_success_callback, on_failure_callback)
+-- Download book. "Saved" is shown only when no on_success_callback takes over
+-- from here (one that opens the book says enough by opening it). quiet leaves
+-- out the start and success notices, for a bulk download that shows its own;
+-- a failure is always shown.
+function KomgaSync:downloadBook(book, series_title, on_success_callback, on_failure_callback, quiet)
     if not self.plugin.api then return end
     
     local local_path, filename = self:getBookLocalPath(book, series_title)
@@ -778,7 +779,9 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
 
     if is_bg_downloading and bg_proc then
         logger.info("KomgaSync: Next book is already downloading in background (PID: " .. tostring(bg_proc.pid) .. "). Polling it.")
-        self.plugin:notify(T(_("Finishing background download of %1..."), filename), "info")
+        if not quiet then
+            self.plugin:notify(T(_("Finishing background download of %1..."), filename), "info")
+        end
         
         local lfs = require("libs/libkoreader-lfs")
         local UIManager = require("ui/uimanager")
@@ -822,7 +825,9 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
     local final_dir = local_path:match("(.*)/[^/]+")
     util.makePath(final_dir .. "/")
     
-    self.plugin:notify(T(_("Downloading %1..."), filename), "info")
+    if not quiet then
+        self.plugin:notify(T(_("Downloading %1..."), filename), "info")
+    end
     logger.info("KomgaSync: Starting download of book", book.id, "to", local_path)
     
     local tmp_path = local_path .. ".part"
@@ -832,7 +837,9 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
         local success, err = self.plugin.api:download_book(book.id, tmp_path)
         if success then
             logger.info("KomgaSync: Download successful for", local_path)
-            self.plugin:notify(T(_("Saved: %1"), filename), "info")
+            if not (quiet or on_success_callback) then
+                self.plugin:notify(T(_("Saved: %1"), filename), "info")
+            end
             self.plugin.settings.matched_books_cache[local_path] = book.id
             self.plugin:saveSettings()
             
@@ -880,6 +887,9 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
     end)
 end
 
+-- Downloads books one after another: one notice when it starts, and the
+-- caller's on_done_callback (its "finished" notice) at the end. The books
+-- themselves are downloaded quietly; a failure still shows.
 function KomgaSync:downloadBooksSeq(books, index, on_done_callback)
     index = index or 1
     if index > #books then
@@ -888,13 +898,18 @@ function KomgaSync:downloadBooksSeq(books, index, on_done_callback)
         end
         return
     end
-    
+    if index == 1 then
+        local _ = self.plugin.i18n._
+        local T = self.plugin.i18n.T
+        self.plugin:notify(T(_("Downloading %1 books..."), #books), "info")
+    end
+
     local book = books[index]
     local next_step = function()
         self:downloadBooksSeq(books, index + 1, on_done_callback)
     end
-    
-    self:downloadBook(book, book.seriesTitle, next_step, next_step)
+
+    self:downloadBook(book, book.seriesTitle, next_step, next_step, true)
 end
 
 -- Deletes a chapter file the way KOReader's file browser does, except that the

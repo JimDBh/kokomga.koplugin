@@ -249,7 +249,6 @@ end
 -- UI prompt helper
 function KomgaMenu:promptInput(title, setting_key, is_number, touchmenu_instance)
     local _ = self.plugin.i18n._
-    local T = self.plugin.i18n.T
     local input
     input = InputDialog:new{
         title = title,
@@ -279,7 +278,7 @@ function KomgaMenu:promptInput(title, setting_key, is_number, touchmenu_instance
                         if setting_key == "server_url" or setting_key == "api_key" then
                             self.plugin:initAPI()
                         end
-                        self.plugin:notify(T(_("Updated %1"), title), "info")
+                        -- No "Updated" notice: the menu shows the new value.
                         if touchmenu_instance and touchmenu_instance.updateItems then
                             touchmenu_instance:updateItems()
                         end
