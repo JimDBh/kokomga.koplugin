@@ -767,26 +767,29 @@ local function seriesStatus(dto)
     return "unread"
 end
 
--- A series, as a folder: Bookshelf draws it as a navigation tile, and a tap
--- drills in through the spec's open_folder. The read state and tallies ride
--- along for when Bookshelf can show them on a folder tile (not in SOURCE_API 1).
+-- A series, as a folder: with its cover it draws in the shelf's folder style,
+-- and a tap drills in through the spec's open_folder. Its badge follows the
+-- reader's folder badge settings; with the "finished of total" format it
+-- shows unread / total, which is what matters when catching up on a series.
 local function seriesItem(dto)
     local title = dto.title or "?"
     local status = seriesStatus(dto)
+    local total = dto.booksCount
+    local has_total = type(total) == "number" and total > 0
     return {
         is_folder = true,
         filepath = PATH_PREFIX .. "series/" .. dto.id,
         title = title,
         label = title,
         cover_image_path = existingCover("series", dto.id),
-        count = dto.booksCount,
+        book_count = has_total and total or nil,
+        finished_count = has_total and dto.booksUnreadCount or nil,
+        finished_total = has_total and total or nil,
         status = status,
         read_status = status,
         komga_series_id = dto.id,
         komga_series_title = title,
         komga_series_summary = dto.summary,
-        komga_total = dto.booksCount,
-        komga_unread = dto.booksUnreadCount,
     }
 end
 
@@ -1107,9 +1110,9 @@ local function bookIdOf(record)
 end
 
 -- Downloads a book through kokomga, so it is linked to Komga for progress sync
--- and the next-chapter flow, then hands its path to `open`. Without `open` (a
--- long-press: SOURCE_API 1 gives `info` no way to open a book) the shelf is
--- redrawn instead, and the book shows as downloaded.
+-- and the next-chapter flow, then hands its path to `open` (Bookshelf's
+-- ctx.open). Without one -- a Bookshelf from before `info` got ctx.open -- the
+-- shelf is redrawn instead, and the book shows as downloaded.
 local function downloadAndOpen(plugin, record, open)
     local _ = plugin.i18n._
     local book_id = bookIdOf(record)
@@ -1393,11 +1396,17 @@ local function seriesFilterSummary(plugin, source)
 end
 
 -- All Series' filters: read status, library and publication status, all
--- applied by Komga. Each change comes back here; Close goes back to on_close.
-local function openSeriesFilters(plugin, source, on_close)
+-- applied by Komga. Each change is reported to on_change at once -- so the
+-- shelf editor counts it even if this dialog is dismissed rather than closed --
+-- and comes back here.
+local function openSeriesFilters(plugin, source, on_change)
     local _ = gettext(plugin)
     local T = template(plugin)
-    local function reopen() openSeriesFilters(plugin, source, on_close) end
+    local function reopen() openSeriesFilters(plugin, source, on_change) end
+    local function changed()
+        on_change()
+        reopen()
+    end
     local ButtonDialog = require("ui/widget/buttondialog")
     local dialog
     local function row(text, open)
@@ -1414,108 +1423,80 @@ local function openSeriesFilters(plugin, source, on_close)
             row(T(_("Read status: %1"), readFilterLabel(plugin, readFilter(source))), function()
                 pickReadFilter(plugin, readFilter(source), function(value)
                     source.read_status = value
-                    reopen()
+                    changed()
                 end, reopen)
             end),
             row(T(_("Library: %1"), libraryLabel(plugin, source)), function()
-                pickLibrary(plugin, source, reopen, reopen)
+                pickLibrary(plugin, source, changed, reopen)
             end),
             row(T(_("Publication: %1"), publicationLabel(plugin, publicationFilter(source))), function()
                 pickPublication(plugin, publicationFilter(source), function(value)
                     source.status = value
-                    reopen()
+                    changed()
                 end, reopen)
             end),
-            row(_("Close"), on_close),
+            row(_("Close"), function() end),
         },
     }
     UIManager:show(dialog)
 end
 
--- A Komga shelf's options, which SOURCE_API 1 has no editor rows for: which
--- list it shows, and for All Series Komga's sort and filters, for any other
--- list the read-status filter. Shown when Komga is picked as a shelf's source.
--- done(true) keeps them, done(false) leaves the shelf as it was.
-local function openShelfOptions(plugin, source, done)
+-- A Komga shelf's own rows in Bookshelf's shelf editor, where "Server order"
+-- would be: which list it shows, then Komga's sort and filters for All Series,
+-- or the read-status filter for any other list. A button edits draft.source
+-- and calls done(); Bookshelf saves it with the shelf, and asks for these rows
+-- again on every redraw, so a changed list brings up its own options.
+local function editorRows(draft)
+    local plugin = livePlugin()
     local _ = gettext(plugin)
     local T = template(plugin)
-    local function reopen() openShelfOptions(plugin, source, done) end
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local dialog
-    local function row(text, open)
-        return { {
-            text = text,
-            callback = function()
-                UIManager:close(dialog)
-                open()
+    local rows = { { {
+        text = function(d)
+            return "Komga: " .. KomgaBookshelf.listLabel(plugin, listMode(d.source))
+        end,
+        callback = function(d, done)
+            pickList(plugin, listMode(d.source), function(mode)
+                d.source.list = mode
+                done()
+            end)
+        end,
+    } } }
+    if listMode(draft.source) == "all_series" then
+        rows[2] = {
+            {
+                text = function(d)
+                    return T(_("Sort: %1"), optionLabel(plugin, SERIES_SORTS, seriesSort(d.source), "Title"))
+                end,
+                callback = function(d, done)
+                    pickSort(plugin, seriesSort(d.source), function(sort)
+                        d.source.sort = sort
+                        done()
+                    end)
+                end,
+            },
+            {
+                text = function(d)
+                    return T(_("Filter: %1"), seriesFilterSummary(plugin, d.source))
+                end,
+                callback = function(d, done)
+                    openSeriesFilters(plugin, d.source, done)
+                end,
+            },
+        }
+    else
+        rows[2] = { {
+            text = function(d)
+                return T(_("Show: %1"), readFilterLabel(plugin, readFilter(d.source)))
+            end,
+            callback = function(d, done)
+                pickReadFilter(plugin, readFilter(d.source), function(value)
+                    d.source.read_status = value
+                    done()
+                end)
             end,
         } }
     end
-
-    local rows = {}
-    rows[#rows + 1] = row("Komga: " .. KomgaBookshelf.listLabel(plugin, listMode(source)), function()
-        pickList(plugin, listMode(source), function(mode)
-            source.list = mode
-            reopen()
-        end, reopen)
-    end)
-    if listMode(source) == "all_series" then
-        rows[#rows + 1] = row(T(_("Sort: %1"), optionLabel(plugin, SERIES_SORTS, seriesSort(source), "Title")), function()
-            pickSort(plugin, seriesSort(source), function(sort)
-                source.sort = sort
-                reopen()
-            end, reopen)
-        end)
-        rows[#rows + 1] = row(T(_("Filter: %1"), seriesFilterSummary(plugin, source)), function()
-            openSeriesFilters(plugin, source, reopen)
-        end)
-    else
-        rows[#rows + 1] = row(T(_("Show: %1"), readFilterLabel(plugin, readFilter(source))), function()
-            pickReadFilter(plugin, readFilter(source), function(value)
-                source.read_status = value
-                reopen()
-            end, reopen)
-        end)
-    end
-    rows[#rows + 1] = {
-        {
-            text = _("Cancel"),
-            callback = function()
-                UIManager:close(dialog)
-                done(false)
-            end,
-        },
-        {
-            text = _("Apply"),
-            is_enter_default = true,
-            callback = function()
-                UIManager:close(dialog)
-                done(true)
-            end,
-        },
-    }
-    dialog = ButtonDialog:new{ title = "Komga", buttons = rows }
-    UIManager:show(dialog)
-end
-
--- What each Komga shelf was last set to, by shelf id. Bookshelf hands `pick` a
--- fresh { kind = "komga" }, so without this a shelf's options would reopen on
--- the defaults rather than on what the shelf shows.
-local function rememberedSource(shelf_id)
-    if type(shelf_id) ~= "string" then return nil end
-    local entry = readEntry("meta", "shelf_sources")
-    local saved = entry and type(entry.items) == "table" and entry.items[shelf_id]
-    return type(saved) == "table" and saved or nil
-end
-
-local function rememberSource(shelf_id, source)
-    if type(shelf_id) ~= "string" then return end
-    local entry = readEntry("meta", "shelf_sources")
-    local map = entry and type(entry.items) == "table" and entry.items or {}
-    local copy = {}
-    for k, v in pairs(source) do copy[k] = v end
-    map[shelf_id] = copy
-    writeEntry("meta", "shelf_sources", { fetched_at = os.time(), items = map })
+    return rows
 end
 
 -- ---------------------------------------------------------------------------
@@ -1531,22 +1512,18 @@ local SPEC = {
     available = function() return livePlugin() ~= nil end,
     remote_prefix = PATH_PREFIX,
 
+    -- Picking Komga as a shelf's source asks which list it shows; its sort and
+    -- filters are then in the shelf editor (editor_rows).
     pick = function(draft, done)
         local plugin = livePlugin()
         if not plugin then return done(false) end
-        local source = draft.source
-        local saved = rememberedSource(draft.id)
-        if saved then
-            for k, v in pairs(saved) do
-                if k ~= "kind" then source[k] = v end
-            end
-        end
-        source.list = listMode(source)
-        openShelfOptions(plugin, source, function(accepted)
-            if accepted then rememberSource(draft.id, source) end
-            done(accepted)
-        end)
+        pickList(plugin, nil, function(mode)
+            draft.source.list = mode
+            done()
+        end, function() done(false) end)
     end,
+
+    editor_rows = editorRows,
 
     -- Answers from the cache; anything stale or missing is fetched in the
     -- background, and notifyChanged has Bookshelf ask again once it lands.
