@@ -4,6 +4,25 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-14
+
+### Changed
+- **Bookshelf Integration**:
+  - Komga now joins [Bookshelf](https://github.com/AndyHazz/bookshelf.koplugin) through its official shelf source API instead of hooking into Bookshelf's internals, so Komga shelves keep working across Bookshelf updates. Requires Bookshelf v5.4.0 or later; with an older Bookshelf, Komga shelves don't appear.
+  - Komga's list, sort and filters are now set in Bookshelf's shelf editor (long-press a Komga shelf), where its "Server order" would be. Picking Komga as a shelf's source just asks which list to show.
+  - Add Komga shelves from Bookshelf's shelf editor (**Source / grouping → Komga**). **Options → Add Komga Shelf to Bookshelf** has been removed.
+  - Series show their cover in the shelf's folder style, and their badge counts books read out of the total (e.g. 8/12), like a local folder's.
+- **Fewer Notices**:
+  - "Saved" is shown only when nothing opens the book afterwards (Download & Open, the next-chapter prompt and Bookshelf open it instead).
+  - Bulk downloads show one notice when they start and one when they finish, instead of two per book. A failure still shows.
+  - No "Updated" notice after changing a setting (the menu shows the new value), and no "Checking server progress" notice before a manual pull's result.
+
+### Fixed
+- **Bookshelf Integration**:
+  - A series or collection opened for the first time loads with its first page of covers behind one "Loading from Komga…" notice, instead of drawing empty, then without covers, then whole.
+  - Returning from a book to a Komga series in Bookshelf no longer leaves the series empty.
+  - Download & Open from a book's long-press dialog now opens the book once it has downloaded.
+
 ## [3.0.0] - 2026-09-25
 
 ### Added
