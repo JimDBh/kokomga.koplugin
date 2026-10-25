@@ -205,12 +205,9 @@ function KomgaListItem:init()
             end
             
             local author_str
-            if type(book.metadata) == "table" and type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
-                local names = {}
-                for _, a in ipairs(book.metadata.authors) do
-                    table.insert(names, a.name)
-                end
-                author_str = table.concat(names, ", ")
+            local plugin = self.menu and self.menu.plugin
+            if plugin and type(book.metadata) == "table" then
+                author_str = table.concat(plugin:authorNames(book.metadata.authors), ", ")
             end
             
             local parts = {}

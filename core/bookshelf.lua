@@ -342,10 +342,12 @@ local function trimBook(book)
     local media = asTable(book.media) or {}
     local progress = asTable(book.readProgress)
     local authors = {}
+    -- With their roles, so "Only list writers as authors" applies without a
+    -- refetch.
     for _, a in ipairs(asTable(md.authors) or {}) do
         local name = asTable(a) and asString(a.name)
         if name and name ~= "" then
-            authors[#authors + 1] = name
+            authors[#authors + 1] = { name = name, role = asString(a.role) }
         end
     end
     return {
@@ -731,7 +733,7 @@ local function bookRecord(plugin, dto, fallback_summary)
     local local_path = localPathIfDownloaded(plugin, dto)
     local status, pct = bookStatus(dto)
 
-    local authors = dto.authors or {}
+    local authors = plugin:authorNames(dto.authors)
     local cover = existingCover("book", dto.id)
 
     return {

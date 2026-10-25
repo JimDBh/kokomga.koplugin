@@ -149,6 +149,15 @@ function KomgaMenu:createSettingsMenu()
                     end
                 },
                 {
+                    text = _("Only list writers as authors"),
+                    checked_func = function() return self.plugin.settings.writers_only_authors end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.writers_only_authors = not self.plugin.settings.writers_only_authors
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
                     text = _("Layout Options"),
                     keep_menu_open = true,
                     sub_item_table_func = function()

@@ -132,7 +132,7 @@ local function save_custom_metadata(filepath, key_or_table, value)
 end
 
 -- Helper to save book metadata both to KOReader's docsettings and to custom_metadata.lua
-local function save_book_metadata(filepath, book, series_title)
+local function save_book_metadata(plugin, filepath, book, series_title)
     if not filepath or not book then return end
     
     local DocSettings = require("docsettings")
@@ -161,11 +161,8 @@ local function save_book_metadata(filepath, book, series_title)
             custom_props.series_index = tostring(book.metadata.numberSort)
             doc_props.series_index = tostring(book.metadata.numberSort)
         end
-        if type(book.metadata.authors) == "table" and #book.metadata.authors > 0 then
-            local author_names = {}
-            for _, a in ipairs(book.metadata.authors) do
-                table.insert(author_names, a.name)
-            end
+        local author_names = plugin:authorNames(book.metadata.authors)
+        if #author_names > 0 then
             custom_props.authors = table.concat(author_names, ", ")
             doc_props.authors = table.concat(author_names, ", ")
         end
@@ -464,7 +461,7 @@ function KomgaSync:matchCurrentBook()
                         self.plugin.settings.matched_books_cache[filepath] = book.id
                         self.plugin:saveSettings()
                         
-                        pcall(save_book_metadata, filepath, book)
+                        pcall(save_book_metadata, self.plugin, filepath, book)
                         
                         self.plugin:notify(T(_("Matched with: %1"), label), "info")
                     end
@@ -843,7 +840,7 @@ function KomgaSync:downloadBook(book, series_title, on_success_callback, on_fail
             self.plugin.settings.matched_books_cache[local_path] = book.id
             self.plugin:saveSettings()
             
-            pcall(save_book_metadata, local_path, book, series_title)
+            pcall(save_book_metadata, self.plugin, local_path, book, series_title)
             if self.plugin.book_index then pcall(self.plugin.book_index.recordBook, book) end
 
             -- Move file into place after sidecar metadata is fully written
@@ -1366,7 +1363,7 @@ function KomgaSync:preDownloadNextBook(filepath)
                     logger.info("KomgaSync bg: Downloading book " .. next_book.id .. " in background to " .. tmp_path)
                     local dl_success, dl_err = self.plugin.api:download_book(next_book.id, tmp_path)
                     if dl_success then
-                        pcall(save_book_metadata, local_path, next_book, series_title)
+                        pcall(save_book_metadata, self.plugin, local_path, next_book, series_title)
                         local os = require("os")
                         os.rename(tmp_path, local_path)
                         self:downloadSeriesCoverIfMissing(next_book, final_dir, series_title)

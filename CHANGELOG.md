@@ -4,6 +4,13 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+### Added
+- **Only List Writers as Authors** ([#15](https://github.com/JimDBh/kokomga.koplugin/issues/15)):
+  - New option (**Options → Only list writers as authors**, off by default) that takes a book's author from Komga's Writer role only, instead of every role (penciller, inker, colorist, letterer, cover, editor, translator…). A book with no writer still shows all its authors. Applies to downloaded books' metadata, the browser's list view and Bookshelf; books downloaded before the change keep their author until downloaded again.
+
+### Changed
+- A person credited in several roles is listed once as an author, not once per role.
+
 ## [3.1.0] - 2026-10-14
 
 ### Changed

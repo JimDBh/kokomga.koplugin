@@ -64,7 +64,8 @@ local DEFAULT_SETTINGS = {
     auto_download_next = 0,
     skip_end_of_book_prompt = false,
     disable_readest_sync_for_komga = false,
-    keep_recent_chapters = 0
+    keep_recent_chapters = 0,
+    writers_only_authors = false
 }
 
 -- Readest's per-book sync entry points. Everything here acts on the currently
@@ -176,6 +177,30 @@ function KomgaPlugin:saveSettings()
         self.settings_file:saveSetting(k, v)
     end
     self.settings_file:flush()
+end
+
+-- A book's author names, from Komga's { name, role } list: each name once, in
+-- Komga's order. With "Only list writers as authors", just the writers, unless
+-- the book has none. Plain strings (Bookshelf's older cache) carry no role and
+-- count as writers.
+function KomgaPlugin:authorNames(authors)
+    if type(authors) ~= "table" then return {} end
+    local function collect(writers_only)
+        local names, seen = {}, {}
+        for _, a in ipairs(authors) do
+            local name, role = a, nil
+            if type(a) == "table" then name, role = a.name, a.role end
+            if type(name) == "string" and name ~= "" and not seen[name]
+                    and (not writers_only or type(role) ~= "string" or role:lower() == "writer") then
+                seen[name] = true
+                names[#names + 1] = name
+            end
+        end
+        return names
+    end
+    local names = self.settings.writers_only_authors and collect(true) or {}
+    if #names == 0 then names = collect(false) end
+    return names
 end
 
 function KomgaPlugin:initAPI()
