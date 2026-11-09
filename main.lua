@@ -59,7 +59,9 @@ local DEFAULT_SETTINGS = {
     library_metadata_cache = {},
     matched_books_cache = {},
     download_dir = "",
+    download_to_library_subfolder = false,
     download_to_subfolder = true,
+    library_names = {},
     auto_rtl_direction = false,
     auto_download_next = 0,
     skip_end_of_book_prompt = false,
@@ -261,6 +263,55 @@ function KomgaPlugin:getDownloadDir()
     
     logger.warn("KomgaPlugin: UI prompt, no directory set for download")
     self:notify(self.i18n._("No directory set for download! Please set a Home Directory or custom path."), "error")
+    return nil
+end
+
+function KomgaPlugin:rememberLibraries(libraries)
+    if type(libraries) ~= "table" then return end
+    if type(self.settings.library_names) ~= "table" then
+        self.settings.library_names = {}
+    end
+    local changed = false
+    for _, lib in ipairs(libraries) do
+        if type(lib) == "table" and type(lib.id) == "string" and lib.id ~= ""
+                and type(lib.name) == "string" and lib.name ~= "" then
+            if self.settings.library_names[lib.id] ~= lib.name then
+                self.settings.library_names[lib.id] = lib.name
+                changed = true
+            end
+        end
+    end
+    if changed then
+        self:saveSettings()
+    end
+end
+
+function KomgaPlugin:getLibraryName(library_id)
+    if type(library_id) ~= "string" or library_id == "" then return nil end
+    local names = type(self.settings.library_names) == "table" and self.settings.library_names or nil
+    if names and type(names[library_id]) == "string" and names[library_id] ~= "" then
+        return names[library_id]
+    end
+    if self.bookshelf and self.bookshelf.getCachedLibraryName then
+        local cached_name = self.bookshelf.getCachedLibraryName(library_id)
+        if type(cached_name) == "string" and cached_name ~= "" then
+            self:rememberLibraries({ { id = library_id, name = cached_name } })
+            return cached_name
+        end
+    end
+    if self.api then
+        local NetworkMgr = require("ui/network/manager")
+        if NetworkMgr:isOnline() then
+            local libs = self.api:get_libraries()
+            if type(libs) == "table" then
+                self:rememberLibraries(libs)
+                names = self.settings.library_names
+                if names and type(names[library_id]) == "string" and names[library_id] ~= "" then
+                    return names[library_id]
+                end
+            end
+        end
+    end
     return nil
 end
 
@@ -548,6 +599,15 @@ function KomgaPlugin:onReaderReady()
 
     self:installReadestGuard()
     self:installReadestSuppression()
+end
+
+function KomgaPlugin:onCloseDocument()
+    if self.bookshelf and self.bookshelf.onCloseDocument then
+        local ok, err = pcall(self.bookshelf.onCloseDocument, self)
+        if not ok then
+            logger.warn("KomgaPlugin: KomgaBookshelf.onCloseDocument failed:", tostring(err))
+        end
+    end
 end
 
 function KomgaPlugin:addToMainMenu(menu_items)

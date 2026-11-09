@@ -650,6 +650,9 @@ function KomgaSync:pushProgress(book_id, current_page, total_pages, is_quiet)
     local success, err = self.plugin.api:patch_read_progress(book_id, current_page, completed)
     if success then
         logger.info("[Komga Sync] Saved page " .. current_page)
+        if self.plugin.bookshelf and self.plugin.bookshelf.updateBookProgress then
+            pcall(self.plugin.bookshelf.updateBookProgress, book_id, current_page, completed)
+        end
         return true
     end
     logger.err("[Komga Sync] Save failed: " .. tostring(err))
@@ -733,6 +736,20 @@ function KomgaSync:getBookLocalPath(book, series_title)
     filename = filename:gsub('[/%\\%:%*%?%"%<%>%|]', '_')
     local download_dir = self.plugin:getDownloadDir()
     if not download_dir then return nil, nil end
+    if self.plugin.settings.download_to_library_subfolder then
+        local library_id = type(book) == "table" and book.libraryId or nil
+        if (not library_id or library_id == "") and type(book) == "table" and book.id and self.plugin.book_index then
+            local indexed = self.plugin.book_index.getBook(book.id)
+            library_id = indexed and indexed.libraryId or nil
+        end
+        local lib_name = library_id and self.plugin.getLibraryName and self.plugin:getLibraryName(library_id) or nil
+        if lib_name and lib_name ~= "" then
+            local clean_lib = lib_name:gsub('[/%\\%:%*%?%"%<%>%|]', '_')
+            if clean_lib ~= "" then
+                download_dir = download_dir .. "/" .. clean_lib
+            end
+        end
+    end
     if self.plugin.settings.download_to_subfolder and series_title and book.oneshot ~= true then
         local clean_series = series_title:gsub('[/%\\%:%*%?%"%<%>%|]', '_')
         download_dir = download_dir .. "/" .. clean_series

@@ -176,7 +176,12 @@ local translations = {
         ["Hiatus"] = "休刊",
         ["Abandoned"] = "已放弃",
         ["Couldn't load libraries from Komga."] = "无法从 Komga 加载媒体库。",
-        ["Browse Komga library"] = "浏览 Komga 图书馆"
+        ["Browse Komga library"] = "浏览 Komga 图书馆",
+        ["Downloads & Storage"] = "下载与存储",
+        ["Sync & Reading"] = "同步与阅读",
+        ["Display & Appearance"] = "显示与外观",
+        ["Cache"] = "缓存",
+        ["Separate Libraries into Subfolders"] = "按媒体库分文件夹下载"
     }
 }
 
@@ -351,7 +356,12 @@ translations["zh_TW"] = {
     ["Hiatus"] = "休刊",
     ["Abandoned"] = "已放棄",
     ["Couldn't load libraries from Komga."] = "無法從 Komga 載入媒體庫。",
-    ["Browse Komga library"] = "瀏覽 Komga 圖書館"
+    ["Browse Komga library"] = "瀏覽 Komga 圖書館",
+    ["Downloads & Storage"] = "下載與儲存",
+    ["Sync & Reading"] = "同步與閱讀",
+    ["Display & Appearance"] = "顯示與外觀",
+    ["Cache"] = "快取",
+    ["Separate Libraries into Subfolders"] = "按媒體庫分資料夾下載"
 }
 
 -- Japanese
@@ -525,7 +535,12 @@ translations["ja"] = {
     ["Hiatus"] = "休載",
     ["Abandoned"] = "打ち切り",
     ["Couldn't load libraries from Komga."] = "Komga からライブラリを読み込めませんでした。",
-    ["Browse Komga library"] = "Komgaライブラリを閲覧"
+    ["Browse Komga library"] = "Komgaライブラリを閲覧",
+    ["Downloads & Storage"] = "ダウンロードと保存先",
+    ["Sync & Reading"] = "同期と読書設定",
+    ["Display & Appearance"] = "表示と外観",
+    ["Cache"] = "キャッシュ",
+    ["Separate Libraries into Subfolders"] = "ライブラリごとにサブフォルダを分ける"
 }
 
 -- Spanish
@@ -699,7 +714,12 @@ translations["es"] = {
     ["Hiatus"] = "En pausa",
     ["Abandoned"] = "Abandonada",
     ["Couldn't load libraries from Komga."] = "No se pudieron cargar las bibliotecas de Komga.",
-    ["Browse Komga library"] = "Examinar biblioteca de Komga"
+    ["Browse Komga library"] = "Examinar biblioteca de Komga",
+    ["Downloads & Storage"] = "Descargas y almacenamiento",
+    ["Sync & Reading"] = "Sincronización y lectura",
+    ["Display & Appearance"] = "Pantalla y apariencia",
+    ["Cache"] = "Caché",
+    ["Separate Libraries into Subfolders"] = "Separar bibliotecas en subcarpetas"
 }
 
 -- Fallbacks for Chinese variants

@@ -51,6 +51,7 @@ function BookIndex.trim(book)
     return {
         id = book.id,
         name = asString(book.name),
+        libraryId = asString(book.libraryId),
         seriesId = asString(book.seriesId),
         seriesTitle = asString(book.seriesTitle),
         oneshot = book.oneshot == true,

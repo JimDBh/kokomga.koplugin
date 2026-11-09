@@ -39,7 +39,47 @@ function KomgaMenu:createSettingsMenu()
     local _ = self.plugin.i18n._
     local T = self.plugin.i18n.T
     local submenu = {}
-    
+
+    table.insert(submenu, {
+        text = _("Komga Browser"),
+        separator = true,
+        callback = function(touchmenu_instance)
+            if touchmenu_instance and touchmenu_instance.onCloseAllMenus then
+                touchmenu_instance:onCloseAllMenus()
+            end
+            self:showBrowser()
+        end
+    })
+
+    if self.plugin.ui and self.plugin.ui.document then
+        local filepath = self.plugin.ui.document.file
+        local is_linked = false
+        if filepath then
+            local book_id = self.plugin.sync:getOrMatchBook(filepath)
+            if book_id then
+                is_linked = true
+            end
+        end
+
+        if not is_linked then
+            table.insert(submenu, {
+                text = _("Manual Match Current Book"),
+                separator = true,
+                callback = function()
+                    self.plugin.sync:matchCurrentBook()
+                end
+            })
+        else
+            table.insert(submenu, {
+                text = _("Unlink Current Book"),
+                separator = true,
+                callback = function()
+                    self.plugin.sync:unlinkCurrentBook()
+                end
+            })
+        end
+    end
+
     table.insert(submenu, {
         text = _("Server Setup"),
         keep_menu_open = true,
@@ -65,25 +105,31 @@ function KomgaMenu:createSettingsMenu()
     })
 
     table.insert(submenu, {
-        text = _("Options"),
+        text = _("Downloads & Storage"),
         keep_menu_open = true,
         sub_item_table_func = function()
             return {
                 {
-                    text = _("Use Komga server progress when available"),
-                    checked_func = function() return self.plugin.settings.use_komga_sync end,
+                    text = _("Custom Download Dir"),
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance) self:promptInput(_("Custom Download Dir"), "download_dir", nil, touchmenu_instance) end
+                },
+                {
+                    text = _("Separate Libraries into Subfolders"),
+                    checked_func = function() return self.plugin.settings.download_to_library_subfolder == true end,
                     keep_menu_open = true,
                     callback = function()
-                        self.plugin.settings.use_komga_sync = not self.plugin.settings.use_komga_sync
+                        self.plugin.settings.download_to_library_subfolder = not self.plugin.settings.download_to_library_subfolder
                         self.plugin:saveSettings()
                     end
                 },
                 {
-                    text = _("Auto RTL for Komga books"),
-                    checked_func = function() return self.plugin.settings.auto_rtl_direction end,
+                    text = _("Download into Series Subfolders"),
+                    checked_func = function() return self.plugin.settings.download_to_subfolder end,
                     keep_menu_open = true,
+                    separator = true,
                     callback = function()
-                        self.plugin.settings.auto_rtl_direction = not self.plugin.settings.auto_rtl_direction
+                        self.plugin.settings.download_to_subfolder = not self.plugin.settings.download_to_subfolder
                         self.plugin:saveSettings()
                     end
                 },
@@ -115,6 +161,43 @@ function KomgaMenu:createSettingsMenu()
                     callback = function(touchmenu_instance)
                         self:promptInput(_("Keep the last N chapters (0 to keep all)"), "keep_recent_chapters", true, touchmenu_instance)
                     end
+                }
+            }
+        end
+    })
+
+    table.insert(submenu, {
+        text = _("Sync & Reading"),
+        keep_menu_open = true,
+        sub_item_table_func = function()
+            return {
+                {
+                    text = _("Use Komga server progress when available"),
+                    checked_func = function() return self.plugin.settings.use_komga_sync end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.use_komga_sync = not self.plugin.settings.use_komga_sync
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
+                    text = _("Disable Readest sync for Komga books"),
+                    checked_func = function() return self.plugin.settings.disable_readest_sync_for_komga end,
+                    keep_menu_open = true,
+                    separator = true,
+                    callback = function()
+                        self.plugin.settings.disable_readest_sync_for_komga = not self.plugin.settings.disable_readest_sync_for_komga
+                        self.plugin:saveSettings()
+                    end
+                },
+                {
+                    text = _("Auto RTL for Komga books"),
+                    checked_func = function() return self.plugin.settings.auto_rtl_direction end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self.plugin.settings.auto_rtl_direction = not self.plugin.settings.auto_rtl_direction
+                        self.plugin:saveSettings()
+                    end
                 },
                 {
                     text = _("Skip end-of-book prompt (directly open next book)"),
@@ -124,29 +207,45 @@ function KomgaMenu:createSettingsMenu()
                         self.plugin.settings.skip_end_of_book_prompt = not self.plugin.settings.skip_end_of_book_prompt
                         self.plugin:saveSettings()
                     end
-                },
+                }
+            }
+        end
+    })
+
+    table.insert(submenu, {
+        text = _("Display & Appearance"),
+        keep_menu_open = true,
+        sub_item_table_func = function()
+            return {
                 {
-                    text = _("Disable Readest sync for Komga books"),
-                    checked_func = function() return self.plugin.settings.disable_readest_sync_for_komga end,
+                    text_func = function()
+                        return self.plugin.settings.view_mode == "grid" and _("Default View Mode: Grid") or _("Default View Mode: List")
+                    end,
                     keep_menu_open = true,
-                    callback = function()
-                        self.plugin.settings.disable_readest_sync_for_komga = not self.plugin.settings.disable_readest_sync_for_komga
+                    separator = true,
+                    callback = function(touchmenu_instance)
+                        self.plugin.settings.view_mode = self.plugin.settings.view_mode == "grid" and "list" or "grid"
                         self.plugin:saveSettings()
+                        if touchmenu_instance and touchmenu_instance.updateItems then
+                            touchmenu_instance:updateItems()
+                        end
                     end
                 },
                 {
-                    text = _("Custom Download Dir"),
+                    text_func = function() return T(_("List Mode Rows (%1)"), self.plugin.settings.list_rows or 5) end,
                     keep_menu_open = true,
-                    callback = function(touchmenu_instance) self:promptInput(_("Custom Download Dir"), "download_dir", nil, touchmenu_instance) end
+                    callback = function(touchmenu_instance) self:promptInput(_("List Rows"), "list_rows", true, touchmenu_instance) end
                 },
                 {
-                    text = _("Download into Series Subfolders"),
-                    checked_func = function() return self.plugin.settings.download_to_subfolder end,
+                    text_func = function() return T(_("Grid Mode Columns (%1)"), self.plugin.settings.grid_columns or 3) end,
                     keep_menu_open = true,
-                    callback = function()
-                        self.plugin.settings.download_to_subfolder = not self.plugin.settings.download_to_subfolder
-                        self.plugin:saveSettings()
-                    end
+                    callback = function(touchmenu_instance) self:promptInput(_("Grid Columns"), "grid_columns", true, touchmenu_instance) end
+                },
+                {
+                    text_func = function() return T(_("Grid Mode Rows (%1)"), self.plugin.settings.grid_rows or 3) end,
+                    keep_menu_open = true,
+                    separator = true,
+                    callback = function(touchmenu_instance) self:promptInput(_("Grid Rows"), "grid_rows", true, touchmenu_instance) end
                 },
                 {
                     text = _("Only list writers as authors"),
@@ -156,43 +255,16 @@ function KomgaMenu:createSettingsMenu()
                         self.plugin.settings.writers_only_authors = not self.plugin.settings.writers_only_authors
                         self.plugin:saveSettings()
                     end
-                },
-                {
-                    text = _("Layout Options"),
-                    keep_menu_open = true,
-                    sub_item_table_func = function()
-                        return {
-                            {
-                                text_func = function()
-                                    return self.plugin.settings.view_mode == "grid" and _("Default View Mode: Grid") or _("Default View Mode: List")
-                                end,
-                                keep_menu_open = true,
-                                callback = function(touchmenu_instance)
-                                    self.plugin.settings.view_mode = self.plugin.settings.view_mode == "grid" and "list" or "grid"
-                                    self.plugin:saveSettings()
-                                    if touchmenu_instance and touchmenu_instance.updateItems then
-                                        touchmenu_instance:updateItems()
-                                    end
-                                end
-                            },
-                            {
-                                text_func = function() return T(_("List Mode Rows (%1)"), self.plugin.settings.list_rows or 5) end,
-                                keep_menu_open = true,
-                                callback = function(touchmenu_instance) self:promptInput(_("List Rows"), "list_rows", true, touchmenu_instance) end
-                            },
-                            {
-                                text_func = function() return T(_("Grid Mode Columns (%1)"), self.plugin.settings.grid_columns or 3) end,
-                                keep_menu_open = true,
-                                callback = function(touchmenu_instance) self:promptInput(_("Grid Columns"), "grid_columns", true, touchmenu_instance) end
-                            },
-                            {
-                                text_func = function() return T(_("Grid Mode Rows (%1)"), self.plugin.settings.grid_rows or 3) end,
-                                keep_menu_open = true,
-                                callback = function(touchmenu_instance) self:promptInput(_("Grid Rows"), "grid_rows", true, touchmenu_instance) end
-                            }
-                        }
-                    end
-                },
+                }
+            }
+        end
+    })
+
+    table.insert(submenu, {
+        text = _("Cache"),
+        keep_menu_open = true,
+        sub_item_table_func = function()
+            return {
                 {
                     text = _("Never update cached covers"),
                     checked_func = function() return self.plugin.settings.never_update_covers end,
@@ -211,43 +283,6 @@ function KomgaMenu:createSettingsMenu()
                     end
                 }
             }
-        end
-    })
-
-    if self.plugin.ui and self.plugin.ui.document then
-        local filepath = self.plugin.ui.document.file
-        local is_linked = false
-        if filepath then
-            local book_id = self.plugin.sync:getOrMatchBook(filepath)
-            if book_id then
-                is_linked = true
-            end
-        end
-
-        if not is_linked then
-            table.insert(submenu, {
-                text = _("Manual Match Current Book"),
-                callback = function()
-                    self.plugin.sync:matchCurrentBook()
-                end
-            })
-        else
-            table.insert(submenu, {
-                text = _("Unlink Current Book"),
-                callback = function()
-                    self.plugin.sync:unlinkCurrentBook()
-                end
-            })
-        end
-    end
-
-    table.insert(submenu, {
-        text = _("Komga Browser"),
-        callback = function(touchmenu_instance)
-            if touchmenu_instance and touchmenu_instance.onCloseAllMenus then
-                touchmenu_instance:onCloseAllMenus()
-            end
-            self:showBrowser()
         end
     })
 

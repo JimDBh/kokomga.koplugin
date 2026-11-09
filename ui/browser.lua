@@ -823,7 +823,13 @@ function KomgaBrowser:showLibraries()
     -- Libraries are returned as a plain array (not paginated) — _loadCatalog handles this
     self:_loadCatalog{
         title = "Libraries",
-        fetch_func = function(page, size) return self.plugin.api:get_libraries() end,
+        fetch_func = function(page, size)
+            local libs = self.plugin.api:get_libraries()
+            if self.plugin.rememberLibraries then
+                self.plugin:rememberLibraries(libs)
+            end
+            return libs
+        end,
         item_builder = function(lib)
             return {
                 text = lib.name,

@@ -353,6 +353,7 @@ local function trimBook(book)
     return {
         id = asString(book.id),
         name = asString(book.name),
+        libraryId = asString(book.libraryId),
         seriesId = asString(book.seriesId),
         seriesTitle = asString(book.seriesTitle),
         oneshot = book.oneshot == true,
@@ -375,6 +376,7 @@ local function trimSeries(series)
     local md = asTable(series.metadata) or {}
     return {
         id = asString(series.id),
+        libraryId = asString(series.libraryId),
         title = asString(md.title) or asString(series.name),
         summary = asString(md.summary),
         lastModified = asString(series.lastModified),
@@ -712,16 +714,63 @@ local function localPathIfDownloaded(plugin, dto)
     if ok and fileExists(path) then return path end
 end
 
--- A book's read state from its Komga progress, and how far through it is.
-local function bookStatus(dto)
-    local progress = dto.readProgress
-    if not progress then return "unread", 0 end
-    if progress.completed then return "finished", 1 end
-    local pages = dto.media and dto.media.pagesCount
-    if pages and pages > 0 and progress.page then
-        return "reading", math.min(progress.page / pages, 0.99)
+-- Local KOReader sidecar (.sdr) progress for a downloaded book, if any.
+local function localBookStatus(local_path)
+    if not local_path then return nil, nil end
+    local ok_ds, DocSettings = pcall(require, "docsettings")
+    if not (ok_ds and DocSettings and DocSettings.hasSidecarFile
+            and DocSettings:hasSidecarFile(local_path)) then
+        return nil, nil
     end
-    return "reading", 0
+    local ok_open, ds = pcall(DocSettings.open, DocSettings, local_path)
+    if not (ok_open and ds and ds.readSetting) then return nil, nil end
+    local summary = ds:readSetting("summary")
+    local summary_status = type(summary) == "table" and summary.status or nil
+    local pct = tonumber(ds:readSetting("percent_finished"))
+    if summary_status == "complete" then
+        return "finished", 1
+    elseif summary_status == "abandoned" then
+        return "on_hold", (pct and pct > 0) and math.min(pct, 0.99) or nil
+    elseif pct and pct > 0 then
+        if pct >= 1 then return "finished", 1 end
+        return "reading", math.min(pct, 0.99)
+    end
+    return nil, nil
+end
+
+-- A book's read state from its Komga progress (and local .sdr when downloaded),
+-- and how far through it is. Unread books return nil for pct so Bookshelf's
+-- HeroCard and %bar/%book_pct tokens do not draw a 0% bar on unread items.
+local function bookStatus(dto, local_path)
+    local progress = dto.readProgress
+    local remote_status, remote_pct = "unread", nil
+    if progress then
+        if progress.completed then
+            remote_status, remote_pct = "finished", 1
+        else
+            local pages = dto.media and dto.media.pagesCount
+            if pages and pages > 0 and progress.page then
+                remote_status, remote_pct = "reading", math.min(progress.page / pages, 0.99)
+            else
+                remote_status, remote_pct = "reading", 0
+            end
+        end
+    end
+
+    local local_status, local_pct = localBookStatus(local_path)
+    if not local_status then
+        return remote_status, remote_pct
+    end
+    if remote_status == "finished" or local_status == "finished" then
+        return "finished", 1
+    end
+    if local_status == "on_hold" then
+        return "on_hold", local_pct or remote_pct
+    end
+    if remote_status == "reading" or local_status == "reading" then
+        return "reading", math.max(remote_pct or 0, local_pct or 0)
+    end
+    return remote_status, remote_pct
 end
 
 -- A book, shaped like the records Bookshelf's own Kobo source produces.
@@ -731,15 +780,19 @@ local function bookRecord(plugin, dto, fallback_summary)
     local md = dto.metadata or {}
     local title = md.title or dto.name or "?"
     local local_path = localPathIfDownloaded(plugin, dto)
-    local status, pct = bookStatus(dto)
+    local status, pct = bookStatus(dto, local_path)
 
     local authors = plugin:authorNames(dto.authors)
     local cover = existingCover("book", dto.id)
 
     return {
-        -- The real file once downloaded, so Bookshelf opens it like any other
-        -- local book; a synthetic path until then.
-        filepath = local_path or (PATH_PREFIX .. "book/" .. dto.id),
+        -- Always keep the synthetic komga:// filepath on the record so Bookshelf
+        -- treats it as a source-owned record (preventing local BIM/sidecar
+        -- refreshes from clobbering Komga's progress/badges or injecting
+        -- page_count over the downloaded tick). SPEC.open resolves local_path
+        -- on tap to open downloaded files directly.
+        filepath = PATH_PREFIX .. "book/" .. dto.id,
+        local_path = local_path,
         filename = dto.name or title,
         title = title,
         display_title = title,
@@ -785,7 +838,6 @@ end
 -- "finished of total" format, books read / books in the series.
 local function seriesItem(dto)
     local title = dto.title or "?"
-    local status = seriesStatus(dto)
     local total = dto.booksCount
     local has_total = type(total) == "number" and total > 0
     local finished = dto.booksReadCount
@@ -801,8 +853,6 @@ local function seriesItem(dto)
         book_count = has_total and total or nil,
         finished_count = has_total and finished or nil,
         finished_total = has_total and total or nil,
-        status = status,
-        read_status = status,
         komga_series_id = dto.id,
         komga_series_title = title,
         komga_series_summary = dto.summary,
@@ -1364,11 +1414,27 @@ local function loadLibraries(plugin)
                 end
             end
             writeEntry("meta", "libraries", { fetched_at = os.time(), items = libraries })
+            if plugin.rememberLibraries then
+                plugin:rememberLibraries(libraries)
+            end
             return libraries
         end
     end
     local cached = readEntry("meta", "libraries")
     return cached and cached.items
+end
+
+function KomgaBookshelf.getCachedLibraryName(library_id)
+    if type(library_id) ~= "string" or library_id == "" then return nil end
+    local cached = readEntry("meta", "libraries")
+    local items = cached and cached.items
+    if type(items) ~= "table" then return nil end
+    for _, lib in ipairs(items) do
+        if type(lib) == "table" and lib.id == library_id and type(lib.name) == "string" and lib.name ~= "" then
+            return lib.name
+        end
+    end
+    return nil
 end
 
 -- Library names are stored alongside their ids, so the options can show them
@@ -1690,6 +1756,44 @@ end
 
 function KomgaBookshelf.isAvailable()
     return registered
+end
+
+-- Updates any cached book DTOs with newly pushed progress so a subsequent
+-- shelf render or offline view reflects the latest page immediately.
+function KomgaBookshelf.updateBookProgress(book_id, page, completed)
+    if type(book_id) ~= "string" or book_id == "" then return end
+    local data = store()
+    local touched = false
+    for _, sec_name in ipairs({ "lists", "series" }) do
+        local sec = data[sec_name]
+        if type(sec) == "table" then
+            for _, entry in pairs(sec) do
+                if type(entry) == "table" and type(entry.items) == "table" then
+                    for _, item in ipairs(entry.items) do
+                        if type(item) == "table" and item.id == book_id then
+                            item.readProgress = {
+                                page = asNumber(page) or 1,
+                                completed = completed == true,
+                            }
+                            touched = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if touched then
+        flushStore()
+        if registered then
+            notifyChanged()
+        end
+    end
+end
+
+function KomgaBookshelf.onCloseDocument(_plugin)
+    if registered then
+        notifyChanged()
+    end
 end
 
 return KomgaBookshelf
