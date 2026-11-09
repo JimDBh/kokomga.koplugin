@@ -4,12 +4,24 @@ All notable changes to the KOReader Komga Client Plugin will be documented in th
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-08
+
 ### Added
+- **Per-Library Download Subfolders** ([#16](https://github.com/JimDBh/kokomga.koplugin/issues/16)):
+  - New option (**Downloads & Storage → Separate Libraries into Subfolders**, off by default) that places downloaded books into a subfolder named after their Komga library (`<Download Dir>/<Library Name>/...`), combining cleanly with **Download into Series Subfolders** when both are enabled.
 - **Only List Writers as Authors** ([#15](https://github.com/JimDBh/kokomga.koplugin/issues/15)):
-  - New option (**Options → Only list writers as authors**, off by default) that takes a book's author from Komga's Writer role only, instead of every role (penciller, inker, colorist, letterer, cover, editor, translator…). A book with no writer still shows all its authors. Applies to downloaded books' metadata, the browser's list view and Bookshelf; books downloaded before the change keep their author until downloaded again.
+  - New option (**Display & Appearance → Only list writers as authors**, off by default) that takes a book's author from Komga's Writer role only, instead of every role (penciller, inker, colorist, letterer, cover, editor, translator…). A book with no writer still shows all its authors. Applies to downloaded books' metadata, the browser's list view and Bookshelf; books downloaded before the change keep their author until downloaded again.
 
 ### Changed
+- **Re-designed Settings Menu**:
+  - Re-organized the plugin menu into logical submenus: **Komga Browser**, **Manual Match / Unlink Current Book** (when a document is open), **Server Setup**, **Downloads & Storage**, **Sync & Reading**, **Display & Appearance**, and **Cache**.
 - A person credited in several roles is listed once as an author, not once per role.
+
+### Fixed
+- **Bookshelf Integration**:
+  - Fixed badge and progress bar incoherence on Komga shelves where downloaded books lost their Komga source identity, causing page-count pills to overwrite the downloaded tick badge and local metadata refreshes to clobber Komga reading progress and series badges.
+  - Reconciled Komga `readProgress` with local KOReader `.sdr` sidecars for downloaded books, updated cached shelf records immediately when progress is pushed or a document closes, and stopped unread books from showing a `0%` progress bar.
+  - Removed conflicting book-level reading status badges from series folder cards.
 
 ## [3.1.0] - 2026-10-14
 
